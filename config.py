@@ -41,6 +41,13 @@ class DefaultConfig(object):
     # file pattern to read frame data from Propbank/Nombank corpus
     frame_file_pattern = 'frames/.*\.xml'
 
+    # path to Ontonotes corpus (relative to corpus_root)
+    ontonotes_path = 'ontonotes-release-5.0/data/files/data/'
+
+    @property
+    def ontonotes_root(self):
+        return join(self.corpus_root, self.ontonotes_path)
+
 
 class CondorConfig(DefaultConfig):
     corpus_root = '/scratch/cluster/pxcheng/corpora/'
@@ -69,3 +76,6 @@ def get_config():
             return MaverickConfig()
 
     raise RuntimeError('Unrecognized platform')
+
+
+cfg = get_config()
