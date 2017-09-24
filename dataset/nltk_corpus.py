@@ -6,9 +6,7 @@ from nltk.corpus import NombankCorpusReader
 from nltk.corpus import PropbankCorpusReader
 from nltk.data import FileSystemPathPointer
 
-import config
-
-cfg = config.get_config()
+from config import cfg
 
 wsj_treebank = BracketParseCorpusReader(
     root=cfg.wsj_root,
