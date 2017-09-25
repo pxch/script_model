@@ -1,0 +1,1 @@
+from ontonotes_loader import load_ontonotes
