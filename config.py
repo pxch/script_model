@@ -1,9 +1,17 @@
 import platform
 import socket
-from os.path import join
+from os.path import dirname, join, realpath
 
 
 class DefaultConfig(object):
+    # absolute path to the root of this repository
+    repo_root = dirname(realpath(__file__))
+
+    # path to the data directory
+    @property
+    def data_path(self):
+        return join(self.repo_root, 'dataset/data')
+
     # root directory for all corpora
     corpus_root = '/Users/pengxiang/corpora/'
 
