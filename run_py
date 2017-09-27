@@ -1,0 +1,15 @@
+#!/bin/bash
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
+export PYTHONPATH=$DIR/:$PYTHONPATH
+
+if [[ "$#" -ge 1  && ( $1 = 'cuda' || $1 = 'cuda1' ) ]]; then
+    COMMAND="THEANO_FLAGS='mode=FAST_RUN,device=$1,floatX=float32' /usr/bin/env python"
+    shift
+else
+    COMMAND="/usr/bin/env python"
+fi
+
+COMMAND="$COMMAND $*"
+
+eval $COMMAND
+
