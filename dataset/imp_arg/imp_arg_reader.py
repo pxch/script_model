@@ -3,6 +3,10 @@ from copy import deepcopy
 from lxml import etree
 from sklearn.model_selection import KFold
 
+from utils import get_console_logger
+
+log = get_console_logger()
+
 
 class ImplicitArgumentPointer(object):
     def __init__(self, fileid, sentnum, wordnum, height):
@@ -103,7 +107,7 @@ class ImplicitArgumentReader(object):
         self.train_test_folds = []
 
     def read_dataset(self, file_path):
-        print '\nReading implicit argument dataset from {}'.format(file_path)
+        log.info('Reading implicit argument dataset from {}'.format(file_path))
         input_xml = open(file_path, 'r')
 
         self.all_instances = []
@@ -113,7 +117,7 @@ class ImplicitArgumentReader(object):
 
         input_xml.close()
 
-        print '\tFound {} instances'.format(len(self.all_instances))
+        log.info('Found {} instances'.format(len(self.all_instances)))
 
     def sort_dataset(self):
         self.all_instances_sorted = sorted(
@@ -140,7 +144,7 @@ class ImplicitArgumentReader(object):
         return reader
 
     def save_dataset(self, file_path):
-        print '\nPrinting implicit argument dataset to {}'.format(file_path)
+        log.info('Printing implicit argument dataset to {}'.format(file_path))
         fout = open(file_path, 'w')
 
         fout.write('<annotations>\n')

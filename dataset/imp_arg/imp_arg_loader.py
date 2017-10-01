@@ -4,6 +4,9 @@ from zipfile import ZipFile
 
 from config import cfg
 from imp_arg_reader import ImplicitArgumentReader
+from utils import get_console_logger
+
+log = get_console_logger()
 
 data_path = cfg.data_path
 
@@ -16,15 +19,15 @@ imp_arg_dataset_url = \
 
 def download_imp_arg_dataset():
     # download dataset from url
-    print '\nDownloading implicit argument dataset from {}'.format(
-        imp_arg_dataset_url)
+    log.info('Downloading implicit argument dataset from {}'.format(
+        imp_arg_dataset_url))
     url_opener = urllib.URLopener()
     dataset_filename = basename(imp_arg_dataset_url)
     dataset_local_path = join(data_path, dataset_filename)
     url_opener.retrieve(imp_arg_dataset_url, dataset_local_path)
 
     # unzip dataset
-    print '\nExtracting implicit argument dataset to {}'.format(data_path)
+    log.info('Extracting implicit argument dataset to {}'.format(data_path))
     dataset_zip = ZipFile(dataset_local_path)
     dataset_zip.extractall(data_path)
     dataset_zip.close()

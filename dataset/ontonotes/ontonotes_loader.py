@@ -4,7 +4,9 @@ import on
 from on.common.util import FancyConfigParser
 
 from config import cfg
-from utils import consts, supress_fd, restore_fd
+from utils import consts, get_console_logger, supress_fd, restore_fd
+
+log = get_console_logger()
 
 
 def get_default_ontonotes_config():
@@ -23,8 +25,8 @@ def load_ontonotes(corpus):
         'ontonotes corpora can only be one of {}'.format(
             consts.valid_ontonotes_corpus)
 
-    print '\nReading Ontonotes corpus {} from {}'.format(
-        corpus, cfg.ontonotes_root)
+    log.info('Reading Ontonotes corpus {} from {}'.format(
+        corpus, cfg.ontonotes_root))
 
     on_cfg = get_default_ontonotes_config()
     on_cfg.set('corpus', 'data_in', cfg.ontonotes_root)
@@ -38,15 +40,15 @@ def load_ontonotes(corpus):
     a_ontonotes = on.ontonotes(on_cfg)
 
     assert len(a_ontonotes) == 1
-    subcorpus = a_ontonotes[0]
+    corpus = a_ontonotes[0]
 
     # restore stderr
     restore_fd(2, null_fd, save_fd)
 
     elapsed = timeit.default_timer() - start_time
-    print '\tDone in {:.3f} seconds'.format(elapsed)
+    log.info('Done in {:.3f} seconds'.format(elapsed))
 
-    print '\tFound {} files with extensions {}'.format(
-        len(subcorpus['document']), on_cfg.get('corpus', 'banks').split())
+    log.info('Found {} files with extensions {}'.format(
+        len(corpus['document']), on_cfg.get('corpus', 'banks').split()))
 
-    return subcorpus
+    return corpus
