@@ -3,13 +3,16 @@ from collections import defaultdict
 
 from config import cfg
 from nltk_corpus import wsj_treebank, propbank, nombank
+from utils import get_console_logger
+
+log = get_console_logger()
 
 
 class PTBReader(object):
     def __init__(self):
-        print '\nBuilding PTBReader from {}'.format(cfg.wsj_root)
+        log.info('Building PTBReader from {}'.format(cfg.wsj_root))
         self.treebank = wsj_treebank
-        print '\tFound {} files'.format(len(self.treebank.fileids()))
+        log.info('Found {} files'.format(len(self.treebank.fileids())))
 
         self.all_sents = []
         self.all_tagged_sents = []
@@ -30,20 +33,21 @@ class SemanticCorpusReader(object):
     def __init__(self, instances, indexing=False):
         self.instances = instances
         self.num_instances = len(self.instances)
-        print '\tFound {} instances'.format(self.num_instances)
+        log.info('Found {} instances'.format(self.num_instances))
 
         self.instances_by_fileid = defaultdict(list)
         if indexing:
             self.build_index()
 
     def build_index(self):
-        print '\tBuilding index by fileid'
+        log.info('Building index by fileid for {}'.format(
+            self.__class__.__name__))
         start_time = timeit.default_timer()
         for instance in self.instances:
             fileid = self.convert_fileid(instance.fileid)
             self.instances_by_fileid[fileid].append(instance)
         elapsed = timeit.default_timer() - start_time
-        print '\tDone in {:.3f} seconds'.format(elapsed)
+        log.info('Done in {:.3f} seconds'.format(elapsed))
 
     @staticmethod
     def convert_fileid(fileid):
@@ -65,15 +69,15 @@ class SemanticCorpusReader(object):
 
 class PropbankReader(SemanticCorpusReader):
     def __init__(self, indexing=False):
-        print '\nBuilding PropbankReader from {}/{}'.format(
-            cfg.propbank_root, cfg.propbank_file)
+        log.info('Building PropbankReader from {}/{}'.format(
+            cfg.propbank_root, cfg.propbank_file))
         super(PropbankReader, self).__init__(
             propbank.instances(), indexing=indexing)
 
 
 class NombankReader(SemanticCorpusReader):
     def __init__(self, indexing=False):
-        print '\nBuilding NombankReader from {}/{}'.format(
-            cfg.nombank_root, cfg.nombank_file)
+        log.info('Building NombankReader from {}/{}'.format(
+            cfg.nombank_root, cfg.nombank_file))
         super(NombankReader, self).__init__(
             nombank.instances(), indexing=indexing)
