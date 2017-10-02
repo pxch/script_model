@@ -13,7 +13,7 @@ valid_ontonotes_corpus = [
 corenlp_dependency_type = 'enhanced-plus-plus-dependencies'
 
 # valid NER tags (combined from CoreNLP and Ontonotes)
-valid_ner_tags = ['PER', 'ORG', 'LOC', 'TEMP', 'NUM', 'MISC']
+valid_ner_tags = ['PER', 'ORG', 'LOC', 'TEMP', 'NUM']
 
 # all possible NER tags from Ontonotes
 ontonotes_ner_tags = [
@@ -54,12 +54,12 @@ ontonotes_to_corenlp_mapping = {
 # mappings from Ontonotes NER tags to valid NER tags
 ontonotes_to_valid_mapping = {
     'PERSON': 'PER',
-    'NORP': 'MISC',
+    'NORP': '',  # 'MISC',
     'FAC': 'LOC',
     'ORG': 'ORG',
     'GPE': 'LOC',
     'LOC': 'LOC',
-    'PRODUCT': 'MISC',
+    'PRODUCT': '',  # 'MISC',
     'DATE': 'TEMP',
     'TIME': 'TEMP',
     'PERCENT': 'NUM',
@@ -67,10 +67,10 @@ ontonotes_to_valid_mapping = {
     'QUANTITY': '',
     'ORDINAL': 'NUM',
     'CARDINAL': 'NUM',
-    'EVENT': 'MISC',
+    'EVENT': '',  # 'MISC',
     'WORK_OF_ART': '',
     'LAW': '',
-    'LANGUAGE': 'MISC'
+    'LANGUAGE': '',  # 'MISC'
 }
 
 # mappings from CoreNLP NER tags to valid NER tags
@@ -78,7 +78,7 @@ corenlp_to_valid_mapping = {
     'PERSON': 'PER',
     'ORGANIZATION': 'ORG',
     'LOCATION': 'LOC',
-    'MISC': 'MISC',
+    'MISC': '',  # 'MISC',
     'MONEY': 'NUM',
     'NUMBER': 'NUM',
     'ORDINAL': 'NUM',
