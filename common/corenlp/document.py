@@ -21,8 +21,16 @@ class Document(object):
         return self._doc_name
 
     @property
+    def sents(self):
+        return self._sents
+
+    @property
     def num_sents(self):
         return self._num_sents
+
+    @property
+    def corefs(self):
+        return self._corefs
 
     @property
     def num_corefs(self):
