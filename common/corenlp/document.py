@@ -99,7 +99,7 @@ class Document(object):
                 # TODO: or add to all tokens of the mention?
                 mention.head_token.add_coref_info(coref, mention)
             # set rep_mention if it is None
-            if True or coref.rep_mention is None:
+            if coref.rep_mention is None:
                 coref.find_rep_mention()
 
     @classmethod

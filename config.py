@@ -10,7 +10,7 @@ class DefaultConfig(object):
     # path to the data directory
     @property
     def data_path(self):
-        return join(self.repo_root, 'dataset/data')
+        return join(self.repo_root, 'data')
 
     # root directory for all corpora
     corpus_root = '/Users/pengxiang/corpora/'
