@@ -88,3 +88,16 @@ corenlp_to_valid_mapping = {
     'DURATION': 'TEMP',
     'SET': 'TEMP'
 }
+
+# set of escape characters in constructing the word/lemma/pos of a token
+escape_char_set = [' // ', '/', ';', ',', ':', '-']
+
+# mappings from escape characters to their representations
+escape_char_map = {
+    ' // ': '@slashes@',
+    '/': '@slash@',
+    ';': '@semicolon@',
+    ',': '@comma@',
+    ':': '@colon@',
+    '-': '@dash@',
+    '_': '@underscore@'}

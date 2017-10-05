@@ -3,6 +3,9 @@ from bz2 import BZ2File
 from gzip import GzipFile
 
 import consts
+from logger import get_console_logger
+
+log = get_console_logger()
 
 
 def supress_fd(fd_number):
@@ -45,11 +48,29 @@ def convert_corenlp_ner_tag(tag):
     return consts.corenlp_to_valid_mapping.get(tag, '')
 
 
-def smart_file_handler(filename):
+def smart_file_handler(filename, mod='r'):
     if filename.endswith('bz2'):
-        f = BZ2File(filename, 'r')
+        f = BZ2File(filename, mod)
     elif filename.endswith('gz'):
-        f = GzipFile(filename, 'r')
+        f = GzipFile(filename, mod)
     else:
-        f = open(filename, 'r')
+        f = open(filename, mod)
     return f
+
+
+def escape(text, char_set=consts.escape_char_set):
+    for char in char_set:
+        if char in consts.escape_char_map:
+            text = text.replace(char, consts.escape_char_map[char])
+        else:
+            log.warn('escape rule for {} undefined'.format(char))
+    return text
+
+
+def unescape(text, char_set=consts.escape_char_set):
+    for char in char_set:
+        if char in consts.escape_char_map:
+            text = text.replace(consts.escape_char_map[char], char)
+        else:
+            log.warn('unescape rule for {} undefined'.format(char))
+    return text
