@@ -9,8 +9,8 @@ class Mention(object):
         # index of the sentence where the mention is located\
         self._sent_idx = sent_idx
 
-        assert start_token_idx < end_token_idx, \
-            'start_token_idx:{} >= end_token_idx:{}'.format(
+        assert 0 <= start_token_idx < end_token_idx, \
+            'invalid: start_token_idx = {}, end_token_idx = {}'.format(
                 start_token_idx, end_token_idx)
         # inclusive index of the first token of the mention in the sentence
         self._start_token_idx = start_token_idx
@@ -63,8 +63,9 @@ class Mention(object):
 
     @head_token_idx.setter
     def head_token_idx(self, head_token_idx):
-        assert type(head_token_idx) == int and head_token_idx >= 0, \
-            'head_token_idx must be a non-negative integer'
+        assert type(head_token_idx) == int, 'head_token_idx must be an integer'
+        assert self.start_token_idx <= head_token_idx < self.end_token_idx, \
+            'head_token_idx must be between start_token_idx and end_token_idx'
         self._head_token_idx = head_token_idx
 
     @property

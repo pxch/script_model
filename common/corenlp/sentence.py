@@ -9,6 +9,8 @@ class Sentence(object):
         self._idx = idx
         # list of all tokens in the sentence
         self._tokens = []
+        # number of tokens in the sentence
+        self._num_tokens = 0
         # list of all dependencies in the sentence
         # excluding the root dependency
         self._deps = []
@@ -16,30 +18,39 @@ class Sentence(object):
         self._dep_graph = None
 
     @property
+    def idx(self):
+        return self._idx
+
+    @property
     def tokens(self):
         return self._tokens
+
+    @property
+    def num_tokens(self):
+        return self._num_tokens
 
     def add_token(self, token):
         check_type(token, Token)
         # set the sent_idx attrib of the token
-        token.sent_idx = self._idx
+        token.sent_idx = self.idx
         # set the token_idx attrib of the token
-        token.token_idx = len(self._tokens)
+        token.token_idx = self.num_tokens
         self._tokens.append(token)
+        self._num_tokens += 1
 
     def add_dep(self, dep):
         check_type(dep, Dependency)
         self._deps.append(dep)
 
     def get_token(self, idx):
-        assert 0 <= idx < len(self._tokens), \
+        assert 0 <= idx < self.num_tokens, \
             'Token idx {} out of range'.format(idx)
         result = self._tokens[idx]
         check_type(result, Token)
-        return self._tokens[idx]
+        return result
 
     def build_dep_graph(self):
-        self._dep_graph = DependencyGraph(self._idx, len(self._tokens))
+        self._dep_graph = DependencyGraph(self.idx, self.num_tokens)
         self._dep_graph.build(self._deps)
 
     @property

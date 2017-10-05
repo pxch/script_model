@@ -87,7 +87,7 @@ def read_conll_depparse(input_path):
                 token_idx = int(items[0])
             except ValueError:
                 continue
-            if token_idx == len(sent.tokens):
+            if token_idx == sent.num_tokens:
                 log.warn(
                     'line #{} ({}) has duplicated token index, ignored.'.format(
                         line_idx, line.strip().replace('\t', ' ')))

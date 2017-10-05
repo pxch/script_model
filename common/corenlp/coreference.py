@@ -10,6 +10,8 @@ class Coreference(object):
         self._idx = idx
         # list of all mentions in the coreference chain
         self._mentions = []
+        # number of all mentions in the coreference chain
+        self._num_mentions = 0
         # pointer to the representative mention
         self._rep_mention = None
 
@@ -20,6 +22,10 @@ class Coreference(object):
     @property
     def mentions(self):
         return self._mentions
+
+    @property
+    def num_mentions(self):
+        return self._num_mentions
 
     @property
     def rep_mention(self):
@@ -41,16 +47,16 @@ class Coreference(object):
     def add_mention(self, mention):
         check_type(mention, Mention)
         # set the coref_idx attrib of the mention
-        mention.coref_idx = self._idx
-
+        mention.coref_idx = self.idx
         # set the mention_idx attrib of the mention
-        mention.mention_idx = len(self._mentions)
+        mention.mention_idx = self.num_mentions
         self._mentions.append(mention)
         if mention.rep:
             self.rep_mention = mention
+        self._num_mentions += 1
 
     def get_mention(self, idx):
-        assert 0 <= idx < len(self._mentions), \
+        assert 0 <= idx < self.num_mentions, \
             'Mention index {} out of range'.format(idx)
         result = self._mentions[idx]
         check_type(result, Mention)

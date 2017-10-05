@@ -5,33 +5,50 @@ from utils import check_type
 
 class Document(object):
     def __init__(self, doc_name):
+        # name of the document
         self._doc_name = doc_name
+        # list of all sentences in the document
         self._sents = []
+        # number of all sentences in the document
+        self._num_sents = 0
+        # list of all coreference chains in the document
         self._corefs = []
+        # number of all coreference chains in the document
+        self._num_corefs = 0
 
     @property
     def doc_name(self):
         return self._doc_name
+
+    @property
+    def num_sents(self):
+        return self._num_sents
+
+    @property
+    def num_corefs(self):
+        return self._num_corefs
 
     def add_sent(self, sent):
         check_type(sent, Sentence)
         if sent.dep_graph is None:
             sent.build_dep_graph()
         self._sents.append(sent)
+        self._num_sents += 1
 
     def add_coref(self, coref):
         check_type(coref, Coreference)
         self._corefs.append(coref)
+        self._num_corefs += 1
 
     def get_sent(self, idx):
-        assert 0 <= idx < len(self._sents), \
+        assert 0 <= idx < self.num_sents, \
             'Sentence index {} out of range'.format(idx)
         result = self._sents[idx]
         check_type(result, Sentence)
         return result
 
     def get_coref(self, idx):
-        assert 0 <= idx < len(self._corefs), \
+        assert 0 <= idx < self.num_corefs, \
             'Coreference index {} out of range'.format(idx)
         result = self._corefs[idx]
         check_type(result, Coreference)
