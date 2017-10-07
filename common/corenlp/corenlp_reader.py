@@ -112,7 +112,7 @@ class CoreNLPTarget(object):
                     self.sents.append(deepcopy(self.sent))
                     self.sent = None
         elif tag == 'token':
-            # map corenlp ner tags to coerse grained ner tags
+            # map corenlp ner tags to coarse grained ner tags
             token = Token(self.word,
                           self.lemma,
                           self.pos,

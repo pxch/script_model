@@ -65,7 +65,7 @@ def add_name_entity_to_doc(doc, name_entity):
     for token_idx in range(
             name_entity.start_word_index, name_entity.end_word_index + 1):
         token = sent.get_token(token_idx)
-        # map ontonotes ner tags to coerse grained ner tags
+        # map ontonotes ner tags to coarse grained ner tags
         token.ner = convert_ontonotes_ner_tag(name_entity.type)
 
 

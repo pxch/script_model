@@ -8,7 +8,7 @@ from logger import get_console_logger
 log = get_console_logger()
 
 
-def supress_fd(fd_number):
+def suppress_fd(fd_number):
     assert fd_number in [1, 2]
     # open a null file descriptor
     null_fd = os.open(os.devnull, os.O_RDWR)

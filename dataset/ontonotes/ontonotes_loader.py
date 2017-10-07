@@ -4,7 +4,7 @@ import on
 from on.common.util import FancyConfigParser
 
 from config import cfg
-from utils import consts, get_console_logger, supress_fd, restore_fd
+from utils import consts, get_console_logger, suppress_fd, restore_fd
 
 log = get_console_logger()
 
@@ -35,7 +35,7 @@ def load_ontonotes(corpus):
     start_time = timeit.default_timer()
 
     # suppress stderr, as the following commands print too much useless info
-    null_fd, save_fd = supress_fd(2)
+    null_fd, save_fd = suppress_fd(2)
 
     a_ontonotes = on.ontonotes(on_cfg)
 
