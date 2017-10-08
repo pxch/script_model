@@ -1,18 +1,11 @@
 from copy import deepcopy
-from os.path import basename, splitext
 
-from lxml import etree
-
-from coreference import Coreference
-from dependency import Dependency
-from document import Document
-from mention import Mention
-from sentence import Sentence
-from token import Token
-from utils import consts, convert_corenlp_ner_tag, smart_file_handler
-from utils import get_console_logger
-
-log = get_console_logger()
+from common.corenlp.coreference import Coreference
+from common.corenlp.dependency import Dependency
+from common.corenlp.mention import Mention
+from common.corenlp.sentence import Sentence
+from common.corenlp.token import Token
+from utils import consts, convert_corenlp_ner_tag
 
 
 class CoreNLPTarget(object):
@@ -166,17 +159,3 @@ class CoreNLPTarget(object):
         sents, self.sents = self.sents, []
         corefs, self.corefs = self.corefs, []
         return sents, corefs
-
-
-def read_doc_from_corenlp(filename):
-    log.info('Reading CoreNLP document from {}'.format(filename))
-    input_xml = smart_file_handler(filename)
-
-    xml_parser = etree.XMLParser(target=CoreNLPTarget())
-    sents, corefs = etree.parse(input_xml, xml_parser)
-    doc_name = splitext(basename(filename))[0]
-    doc = Document.construct(doc_name, sents, corefs)
-
-    input_xml.close()
-
-    return doc

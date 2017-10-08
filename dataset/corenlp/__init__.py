@@ -1,0 +1,1 @@
+from corenlp_reader import read_doc_from_corenlp

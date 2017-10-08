@@ -7,5 +7,3 @@ from token import Token
 
 __all__ = \
     ['Coreference', 'Dependency', 'Document', 'Mention', 'Token', 'Sentence']
-
-from corenlp_reader import read_doc_from_corenlp
