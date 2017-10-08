@@ -1,1 +1,2 @@
-from corenlp_reader import read_doc_from_corenlp
+from conll_depparse_reader import read_conll_depparse
+from corenlp_reader import read_corenlp_doc

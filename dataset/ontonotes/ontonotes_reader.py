@@ -5,6 +5,7 @@ from on.corpora import coreference, name, subcorpus
 
 from common.corenlp import *
 from config import cfg
+from dataset.corenlp import read_conll_depparse
 from utils import check_type, convert_ontonotes_ner_tag, get_console_logger
 
 log = get_console_logger()
@@ -67,60 +68,6 @@ def add_name_entity_to_doc(doc, name_entity):
         token = sent.get_token(token_idx)
         # map ontonotes ner tags to coarse grained ner tags
         token.ner = convert_ontonotes_ner_tag(name_entity.type)
-
-
-def read_conll_depparse(input_path):
-    fin = open(input_path, 'r')
-
-    all_sents = []
-    sent_idx = 0
-    sent = Sentence(sent_idx)
-
-    for line_idx, line in enumerate(fin.readlines()):
-        if line == '\n':
-            all_sents.append(deepcopy(sent))
-            sent_idx += 1
-            sent = Sentence(sent_idx)
-        else:
-            items = line.strip().split('\t')
-            try:
-                token_idx = int(items[0])
-            except ValueError:
-                continue
-            if token_idx == sent.num_tokens:
-                log.warn(
-                    'line #{} ({}) has duplicated token index, ignored.'.format(
-                        line_idx, line.strip().replace('\t', ' ')))
-                continue
-            word = items[1]
-            lemma = items[2]
-            pos = items[4]
-            sent.add_token(Token(word, lemma, pos))
-            try:
-                head_idx = int(items[6])
-            except ValueError:
-                continue
-            dep_label = items[7]
-            if dep_label != 'root':
-                sent.add_dep(Dependency(
-                    label=dep_label,
-                    head_idx=head_idx - 1,
-                    mod_idx=token_idx - 1,
-                    extra=False))
-            if items[8] != '_':
-                for e_dep in items[8].strip().split('|'):
-                    try:
-                        e_dep_head_idx = int(e_dep.split(':')[0])
-                    except ValueError:
-                        continue
-                    e_dep_label = ':'.join(e_dep.split(':')[1:])
-                    sent.add_dep(Dependency(
-                        label=e_dep_label,
-                        head_idx=e_dep_head_idx - 1,
-                        mod_idx=token_idx - 1,
-                        extra=True))
-
-    return all_sents
 
 
 def read_doc_from_ontonotes(coref_doc, name_doc):
