@@ -1,6 +1,10 @@
+from nltk.tree import Tree
+
 from dependency import Dependency, DependencyGraph
 from token import Token
-from utils import check_type
+from utils import check_type, get_console_logger
+
+log = get_console_logger()
 
 
 class Sentence(object):
@@ -16,6 +20,8 @@ class Sentence(object):
         self._deps = []
         # dependency graph built upon all dependencies
         self._dep_graph = None
+        # constituency tree, could be empty
+        self._tree = None
 
     @property
     def idx(self):
@@ -93,6 +99,17 @@ class Sentence(object):
                     results.extend([(prep_label, self.get_token(idx))
                                     for idx in indices])
         return sorted(results, key=lambda pair: pair[1].token_idx)
+
+    @property
+    def tree(self):
+        return self._tree
+
+    @tree.setter
+    def tree(self, tree):
+        check_type(tree, Tree)
+        if self._tree is not None:
+            log.warning('Overriding existing constituency tree')
+        self._tree = tree
 
     def __str__(self):
         return ' '.join([str(token) for token in self._tokens]) + \

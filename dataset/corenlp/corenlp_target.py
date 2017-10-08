@@ -1,5 +1,7 @@
 from copy import deepcopy
 
+from nltk.tree import Tree
+
 from common.corenlp.coreference import Coreference
 from common.corenlp.dependency import Dependency
 from common.corenlp.mention import Mention
@@ -23,6 +25,8 @@ class CoreNLPTarget(object):
         self.gov_idx = -1
         self.dep_idx = -1
         self.extra = False
+        # string representation of the constituency tree (nltk.tree.Tree)
+        self.tree_str = ''
         self.sent_idx = -1
         self.start_token_idx = -1
         self.end_token_idx = -1
@@ -82,6 +86,8 @@ class CoreNLPTarget(object):
                     self.pos += data
                 elif self.tag == 'NER':
                     self.ner += data
+                elif self.tag == 'parse':
+                    self.tree_str += data
             elif self.parse_coref:
                 if self.tag == 'sentence':
                     self.sent_idx = int(data) - 1
@@ -115,6 +121,9 @@ class CoreNLPTarget(object):
             self.lemma = ''
             self.pos = ''
             self.ner = ''
+        elif tag == 'parse':
+            self.sent.tree = Tree.fromstring(self.tree_str)
+            self.tree_str = ''
         elif tag == 'dependencies':
             if self.parse_dep:
                 self.parse_dep = False
