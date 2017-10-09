@@ -56,6 +56,18 @@ class DefaultConfig(object):
     def ontonotes_root(self):
         return join(self.corpus_root, self.ontonotes_path)
 
+    wsj_corenlp_path = 'wsj_corenlp/20171007'
+
+    @property
+    def wsj_corenlp_root(self):
+        return join(self.corpus_root, self.wsj_corenlp_path)
+
+    wsj_gold_parse_path = 'wsj_corenlp/depparse/'
+
+    @property
+    def wsj_gold_parse_root(self):
+        return join(self.corpus_root, self.wsj_gold_parse_root)
+
 
 class CondorConfig(DefaultConfig):
     corpus_root = '/scratch/cluster/pxcheng/corpora/'
