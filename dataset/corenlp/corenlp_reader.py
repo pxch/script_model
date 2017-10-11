@@ -81,8 +81,7 @@ class CoreNLPTarget(object):
                     self.rep = True
 
     def data(self, data):
-        data = data.strip()
-        if data != '':
+        if data.strip() != '':
             if self.parse_sent:
                 if self.tag == 'word':
                     self.word += data
