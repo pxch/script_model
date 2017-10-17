@@ -2,6 +2,7 @@ import pickle as pkl
 import timeit
 from os.path import exists, join
 
+import numpy as np
 from nltk.stem import WordNetLemmatizer
 from sklearn.model_selection import KFold
 from tqdm import tqdm
@@ -94,8 +95,14 @@ class ImplicitArgumentDataset(object):
         log.info('Creating {} fold cross validation split'.format(n_splits))
         self.n_splits = n_splits
 
+        self._train_test_folds = []
+        instance_order_list = np.asarray(self._instance_order_list)
+
         kf = KFold(n_splits=self.n_splits, shuffle=False)
-        self._train_test_folds = list(kf.split(self._instance_order_list))
+        for train, test in kf.split(self._instance_order_list):
+            train_indices = instance_order_list[train]
+            test_indices = instance_order_list[test]
+            self._train_test_folds.append((train_indices, test_indices))
 
     def get_train_fold(self, fold_idx):
         assert 0 <= fold_idx < self.n_splits, \
@@ -271,7 +278,7 @@ class ImplicitArgumentDataset(object):
                 helper.propositions_path))
             pkl.dump(self.propositions, open(helper.propositions_path, 'w'))
 
-    def load_predicates(self, path=helper.propositions_path):
+    def load_propositions(self, path=helper.propositions_path):
         log.info('Loading all propositions from {}'.format(path))
         start_time = timeit.default_timer()
         self._propositions = pkl.load(open(helper.propositions_path, 'r'))
