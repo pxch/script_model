@@ -1,6 +1,6 @@
 import pickle as pkl
 import timeit
-from collections import defaultdict
+from collections import OrderedDict
 from operator import itemgetter
 
 from common.imp_arg import helper
@@ -16,7 +16,7 @@ class CandidateDict(object):
         self._propbank_reader = propbank_reader
         self._nombank_reader = nombank_reader
         self._max_dist = max_dist
-        self._candidate_dict = defaultdict(list)
+        self._candidate_dict = OrderedDict()
 
     def __iter__(self):
         for key, candidates in self._candidate_dict.items():
@@ -53,16 +53,14 @@ class CandidateDict(object):
 
         return candidates
 
-    def add_candidates(self, pred_pointer):
+    def add_candidates(self, fileid, sentnum):
         assert not self.read_only, 'cannot add candidates in read_only mode'
 
-        fileid = pred_pointer.fileid
         instances = []
         instances.extend(self._propbank_reader.search_by_fileid(fileid))
         instances.extend(self._nombank_reader.search_by_fileid(fileid))
 
-        for sentnum in range(max(0, pred_pointer.sentnum - self._max_dist),
-                             pred_pointer.sentnum + 1):
+        for sentnum in range(max(0, sentnum - self._max_dist), sentnum + 1):
             key = '{}:{}'.format(fileid, sentnum)
             if key not in self._candidate_dict:
                 self.add_key(key, instances)
@@ -95,6 +93,19 @@ class CandidateDict(object):
                         candidate_list[index].merge(candidate)
 
         self._candidate_dict[key] = candidate_list
+
+    def parse_corenlp(self, corenlp_mapping):
+        log.info('Parsing CoreNLP information for all candidates')
+        for key in self._candidate_dict:
+            fileid = key.split(':')[0]
+            sentnum = int(key.split(':')[1])
+
+            idx_mapping, doc = corenlp_mapping[fileid]
+            corenlp_sent = doc.get_sent(sentnum)
+            sent_idx_mapping = idx_mapping[sentnum]
+
+            for candidate in self._candidate_dict[key]:
+                candidate.parse_corenlp(corenlp_sent, sent_idx_mapping)
 
     @classmethod
     def load(cls, candidate_dict_path, propbank_reader=None,

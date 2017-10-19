@@ -14,7 +14,7 @@ from config import cfg
 from dataset.corenlp import read_corenlp_doc
 from dataset.imp_arg import imp_arg_instances
 from dataset.nltk import PTBReader, NombankReader, PropbankReader
-from utils import get_console_logger
+from utils import PBToLogger, get_console_logger
 
 log = get_console_logger()
 
@@ -113,10 +113,6 @@ class ImplicitArgumentDataset(object):
         assert 0 <= fold_idx < self.n_splits, \
             'fold index {} out of range'.format(fold_idx)
         return self._train_test_folds[fold_idx][1]
-
-    @property
-    def propositions(self):
-        return self._propositions
 
     @property
     def ptb_reader(self):
@@ -224,29 +220,44 @@ class ImplicitArgumentDataset(object):
 
     @property
     def candidate_dict(self):
-        if self._candidate_dict is None:
-            if not exists(helper.candidate_dict_path):
-                assert len(self.propositions) > 0
-                log.info('Building candidate dict from Propbank and Nombank')
-                self._candidate_dict = CandidateDict(
-                    propbank_reader=self.propbank_reader,
-                    nombank_reader=self.nombank_reader,
-                    max_dist=self._max_dist)
-
-                for proposition in tqdm(
-                        self.propositions, desc='Processed', ncols=100):
-                    self.candidate_dict.add_candidates(proposition.pred_pointer)
-
-                self._candidate_dict.save(helper.candidate_dict_path)
-
-            else:
-                self._candidate_dict = CandidateDict.load(
-                    helper.candidate_dict_path,
-                    max_dist=self._max_dist)
-
         return self._candidate_dict
 
-    def build_propositions(self, save=False):
+    def build_candidate_dict(self, save_path=None):
+        if self._candidate_dict:
+            log.warning('Found existing candidate dict')
+            return
+
+        log.info('Building candidate dict from Propbank and Nombank')
+
+        self._candidate_dict = CandidateDict(
+            propbank_reader=self.propbank_reader,
+            nombank_reader=self.nombank_reader,
+            max_dist=self._max_dist)
+
+        for instance in tqdm(self._instances_sorted, file=PBToLogger(log),
+                             desc='Processed', ncols=100, mininterval=5):
+            pred_node = instance.pred_node
+            self._candidate_dict.add_candidates(
+                fileid=pred_node.fileid, sentnum=pred_node.sentnum)
+
+        if save_path is not None:
+            self._candidate_dict.save(save_path)
+
+    def load_candidate_dict(self, path=helper.candidate_dict_path):
+        self._candidate_dict = CandidateDict.load(
+            path, max_dist=self._max_dist)
+
+    @property
+    def propositions(self):
+        return self._propositions
+
+    def build_propositions(self, save_path=None, filter_conflict=False,
+                           filter_incorporated=False, verbose=False):
+        if len(self._propositions) > 0:
+            log.warning('Found {} existing propositions'.format(
+                len(self._propositions)))
+            return
+
         log.info('Building propositions from instances')
         for instance in self.all_instances(sort=True):
             proposition = Proposition.build(instance)
@@ -254,29 +265,31 @@ class ImplicitArgumentDataset(object):
 
             self._propositions.append(proposition)
 
+        nombank_reader = self.nombank_reader
         log.info('Check explicit arguments with Nombank instances')
-        for proposition in self.propositions:
-            nombank_instance = self.nombank_reader.search_by_pointer(
+        for proposition in self._propositions:
+            nombank_instance = nombank_reader.search_by_pointer(
                 proposition.pred_pointer)
             proposition.check_exp_args(
                 nombank_instance,
-                add_missing_args=False,
-                remove_conflict_imp_args=False,
-                verbose=False)
+                filter_conflict=filter_conflict,
+                verbose=verbose)
 
-        log.info('Parse subtrees for all explicit / implicit arguments')
         ptb_reader = self.ptb_reader
-        for proposition in tqdm(self.propositions, desc='Processed', ncols=100):
+        log.info('Parse subtrees for all explicit / implicit arguments')
+        for proposition in tqdm(self._propositions, file=PBToLogger(log),
+                                desc='Processed', ncols=100, mininterval=5):
             proposition.parse_arg_subtrees(ptb_reader)
 
-        log.info('Filter incorporated arguments')
-        for proposition in self.propositions:
-            proposition.filter_incorporated_argument(verbose=False)
+        if filter_incorporated:
+            log.info('Filter incorporated arguments')
+            for proposition in self._propositions:
+                proposition.filter_incorporated_argument(verbose=verbose)
 
-        if save:
+        if save_path is not None:
             log.info('Saving all propositions to {}'.format(
                 helper.propositions_path))
-            pkl.dump(self.propositions, open(helper.propositions_path, 'w'))
+            pkl.dump(self._propositions, open(helper.propositions_path, 'w'))
 
     def load_propositions(self, path=helper.propositions_path):
         log.info('Loading all propositions from {}'.format(path))
@@ -284,6 +297,23 @@ class ImplicitArgumentDataset(object):
         self._propositions = pkl.load(open(helper.propositions_path, 'r'))
         elapsed = timeit.default_timer() - start_time
         log.info('Done in {:.3f} seconds'.format(elapsed))
+
+    def parse_corenlp(self, save=False):
+        log.info('Parsing CoreNLP info for arguments of all propositions')
+        for proposition in self._propositions:
+            idx_mapping, doc = self.corenlp_mapping[
+                proposition.pred_pointer.fileid]
+            proposition.parse_arg_corenlp(doc, idx_mapping)
+
+        self._candidate_dict.parse_corenlp(self.corenlp_mapping)
+
+        if save:
+            log.info('Saving all propositions with CoreNLP information '
+                     'to {}'.format(helper.propositions_w_corenlp_path))
+            pkl.dump(self._propositions,
+                     open(helper.propositions_w_corenlp_path, 'w'))
+
+            self._candidate_dict.save(helper.candidate_dict_w_corenlp_path)
 
     def add_candidates(self):
         log.info('Adding candidates to propositions')

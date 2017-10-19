@@ -110,26 +110,29 @@ class DependencyGraph(object):
 
     # get the parent token index and corresponding dependency label
     # of the input token, return -1 if the input token is root
-    def get_parent(self, token_idx):
+    def get_parent(self, token_idx, msg_prefix=''):
         parent = self.lookup('mod', token_idx, include_extra=False)
         if len(parent) == 0:
             return 'root', -1
-        assert len(parent) == 1 and len(parent.items()[0][1]) == 1, \
-            'In sentence #{}, token #{} has more than 1 non-extra ' \
-            'head token: {}'.format(self._sent_idx, token_idx, parent)
+        if len(parent) > 1 or len(parent.items()[0][1]) > 1:
+            log.warning(
+                '{}: In sentence #{}, token #{} has more than 1 non-extra '
+                'head token: {}'.format(
+                    msg_prefix, self._sent_idx, token_idx, parent))
         return parent.items()[0][0], parent.items()[0][1][0]
 
-    # get the path length from the input token to the root
-    def get_root_path_length(self, token_idx):
-        path_length = 0
+    # get the path [(label, parent_idx)] from the input token to the root
+    def get_root_path(self, token_idx, msg_prefix=''):
+        root_path = []
         current_idx = token_idx
         while current_idx != -1:
-            _, current_idx = self.get_parent(current_idx)
-            path_length += 1
-        return path_length
+            label, parent_idx = self.get_parent(current_idx, msg_prefix)
+            root_path.append((label, parent_idx))
+            current_idx = parent_idx
+        return root_path
 
     # get the head token index from a range of tokens
-    def get_head_token_idx(self, start_token_idx, end_token_idx):
+    def get_head_token_idx(self, start_token_idx, end_token_idx, msg_prefix=''):
         self.check_token_idx(start_token_idx)
         self.check_token_idx(end_token_idx - 1)
         assert start_token_idx < end_token_idx, \
@@ -139,12 +142,13 @@ class DependencyGraph(object):
         for token_idx in range(start_token_idx, end_token_idx):
             head_trace = [token_idx]
             while start_token_idx <= head_trace[-1] < end_token_idx:
-                _, head_idx = self.get_parent(head_trace[-1])
+                _, head_idx = self.get_parent(head_trace[-1], msg_prefix)
                 # warn if there is a loop in finding one token's head token
                 if head_idx in head_trace:
                     log.warn(
-                        'In sentence #{}, token #{} has loop in its head '
-                        'trace list.'.format(self._sent_idx, token_idx))
+                        '{}: In sentence #{}, token #{} has loop in its head '
+                        'trace list.'.format(
+                            msg_prefix, self._sent_idx, token_idx))
                     break
                 head_trace.append(head_idx)
             head_idx_map.append((token_idx, head_trace[-2]))
@@ -152,7 +156,7 @@ class DependencyGraph(object):
         # warn if the tokens in the range don't have the same head token
         if min(head_idx_list) != max(head_idx_list):
             log.warn(
-                'In sentence #{}, tokens within the range [{}, {}] do not '
+                '{}: In sentence #{}, tokens within the range [{}, {}] do not '
                 'have the same head token'.format(
-                    self._sent_idx, start_token_idx, end_token_idx))
+                    msg_prefix, self._sent_idx, start_token_idx, end_token_idx))
         return min(head_idx_list)

@@ -1,9 +1,12 @@
+from collections import Counter
+
 from nltk.corpus.reader.nombank import NombankSplitTreePointer
 from nltk.corpus.reader.nombank import NombankTreePointer
 from nltk.corpus.reader.propbank import PropbankSplitTreePointer
 from nltk.corpus.reader.propbank import PropbankTreePointer
 from nltk.tree import Tree
 
+from common.corenlp import Sentence
 from dataset.imp_arg import ImplicitArgumentNode
 from utils import check_type, get_console_logger
 
@@ -27,13 +30,13 @@ class Subtree(object):
         return self._treepos
 
     def idx_list(self, no_trace=True):
-        if filter:
+        if no_trace:
             return self._filtered_idx_list
         else:
             return self._idx_list
 
     def word_list(self, no_trace=True):
-        if filter:
+        if no_trace:
             return self._filtered_word_list
         else:
             return self._word_list
@@ -74,6 +77,55 @@ class Subtree(object):
         return cls(treepos, idx_list, word_list, pos_list)
 
 
+class CoreNLPInfo(object):
+    def __init__(self, idx_list, head_idx, entity_idx, mention_idx):
+        self.idx_list = idx_list
+        self.head_idx = head_idx
+        self.entity_idx = entity_idx
+        self.mention_idx = mention_idx
+
+    @classmethod
+    def build(cls, idx_list, corenlp_sent, sent_idx_mapping, head_only=True,
+              msg_prefix=''):
+        assert all(idx in sent_idx_mapping for idx in idx_list)
+        mapped_idx_list = [sent_idx_mapping.index(idx) for idx in idx_list]
+        head_idx = -1
+        if mapped_idx_list:
+            head_idx = corenlp_sent.dep_graph.get_head_token_idx(
+                mapped_idx_list[0], mapped_idx_list[-1] + 1, msg_prefix)
+
+        entity_idx = -1
+        mention_idx = -1
+
+        if mapped_idx_list and head_idx != -1:
+            head_token = corenlp_sent.get_token(head_idx)
+            if head_token.coref:
+                entity_idx = head_token.coref_idx()
+                mention_idx = head_token.mention_idx()
+
+            elif not head_only:
+                token_list = \
+                    [corenlp_sent.get_token(idx) for idx in mapped_idx_list]
+                entity_idx_counter = Counter()
+                for token in token_list:
+                    if token.coref_idx() != -1:
+                        entity_idx_counter[token.coref_idx()] += 1
+
+                if entity_idx_counter:
+                    entity_idx = entity_idx_counter.most_common(1)[0][0]
+
+                    mention_idx_counter = Counter()
+                    for token in token_list:
+                        if token.coref_idx() == entity_idx:
+                            mention_idx = token.mention_idx()
+                            mention_idx_counter[mention_idx] += 1
+
+                    mention_idx = \
+                        mention_idx_counter.most_common(1)[0][0]
+
+        return cls(mapped_idx_list, head_idx, entity_idx, mention_idx)
+
+
 class TreePointer(object):
     def __init__(self, fileid, sentnum, tree_pointer):
         # treebank file name, format: wsj_0000
@@ -101,9 +153,19 @@ class TreePointer(object):
         # tree pointer
         self._tree_pointer = tree_pointer
 
-        # list of subtrees parsed from self._tree_pointer and self._tree
+        # list of subtrees parsed from gold parsed tree
         # length of the list should be 1 if tree_pointer is not a split pointer
         self._subtree_list = []
+
+        # list of CoreNLP chunks parsed from and CoreNLP Document
+        self._corenlp_list = []
+
+        # index of the head piece (0 if not a split pointer)
+        self._head_piece = -1
+        # index of the entity the pointer is linked to, -1 otherwise
+        self._entity_idx = -1
+        # index of the mention the pointer is linked to, -1 otherwise
+        self._mention_idx = -1
 
     @property
     def fileid(self):
@@ -160,6 +222,77 @@ class TreePointer(object):
         assert self.has_subtree()
         return ' '.join(
             [subtree.surface(no_trace) for subtree in self._subtree_list])
+
+    def has_corenlp(self):
+        return len(self._corenlp_list) > 0
+
+    def parse_corenlp(self, corenlp_sent, sent_idx_mapping):
+        assert self.has_subtree(), 'must have subtree info to parse CoreNLP'
+
+        if self.has_corenlp():
+            log.warning('Overriding existing CoreNLP info')
+        self._corenlp_list = []
+
+        check_type(corenlp_sent, Sentence)
+
+        for subtree in self.subtree_list:
+            self._corenlp_list.append(CoreNLPInfo.build(
+                idx_list=subtree.idx_list(no_trace=True),
+                corenlp_sent=corenlp_sent,
+                sent_idx_mapping=sent_idx_mapping,
+                head_only=False,
+                msg_prefix=self.fileid))
+
+        self._head_piece = -1
+        min_root_path_length = 999
+
+        for piece_idx, corenlp_info in enumerate(self.corenlp_list):
+            if corenlp_info.head_idx != -1:
+                root_path = corenlp_sent.dep_graph.get_root_path(
+                    corenlp_info.head_idx, msg_prefix=self.fileid)
+                # with same root_path_length, take the latter token
+                if len(root_path) <= min_root_path_length:
+                    min_root_path_length = len(root_path)
+                    self._head_piece = piece_idx
+
+        self._entity_idx = -1
+        self._mention_idx = -1
+
+        head_corenlp_info = self.corenlp_list[self._head_piece]
+        if head_corenlp_info.entity_idx != -1:
+            self._entity_idx = head_corenlp_info.entity_idx
+            self._mention_idx = head_corenlp_info.mention_idx
+        else:
+            entity_idx_counter = Counter()
+            for corenlp_info in self.corenlp_list:
+                if corenlp_info.entity_idx != -1:
+                    entity_idx_counter[corenlp_info.entity_idx] += 1
+
+            if entity_idx_counter:
+                self._entity_idx = entity_idx_counter.most_common(1)[0][0]
+
+                mention_idx_counter = Counter()
+                for corenlp_info in self.corenlp_list:
+                    if corenlp_info.entity_idx == self._entity_idx:
+                        mention_idx_counter[corenlp_info.mention_idx] += 1
+
+                self._mention_idx = mention_idx_counter.most_common(1)[0][0]
+
+    @property
+    def corenlp_list(self):
+        return self._corenlp_list
+
+    @property
+    def head_piece(self):
+        return self._head_piece
+
+    @property
+    def entity_idx(self):
+        return self._entity_idx
+
+    @property
+    def mention_idx(self):
+        return self._mention_idx
 
     def __str__(self):
         return '{}:{}:{}'.format(

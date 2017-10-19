@@ -1,6 +1,7 @@
 from collections import defaultdict
 from copy import deepcopy
 
+from common.corenlp import Document
 from nltk.corpus.reader.nombank import NombankChainTreePointer
 from nltk.corpus.reader.nombank import NombankSplitTreePointer
 
@@ -83,8 +84,8 @@ class Proposition(object):
     def exp_args(self):
         return self._exp_args
 
-    def check_exp_args(self, nombank_instance, add_missing_args=False,
-                       remove_conflict_imp_args=False, verbose=False):
+    def check_exp_args(self, nombank_instance, filter_conflict=False,
+                       verbose=False):
         if verbose:
             put_log = log.warning
         else:
@@ -106,22 +107,23 @@ class Proposition(object):
                 nombank_args = nombank_arg_dict[label]
 
                 if label not in self.exp_args:
-                    put_log(
-                        '{} has {} in Nombank but not found in explicit '
-                        'arguments.'.format(self.pred_pointer, label))
-                    if add_missing_args:
+                    message = \
+                        '{} has {} in Nombank but not found in ' \
+                        'explicit arguments.'.format(self.pred_pointer, label)
+                    if filter_conflict:
+                        put_log(message)
                         put_log(
                             'Adding missing explicit {}: {}.'.format(
                                 label, nombank_args))
                         self.exp_args[label] = \
                             [TreePointer(fileid, sentnum, arg)
                              for arg in nombank_args]
-                        if remove_conflict_imp_args and label in self.imp_args:
+                        if label in self.imp_args:
                             put_log(
                                 'Removing implicit {}.'.format(label))
                             self.imp_args.pop(label, None)
                     else:
-                        put_log('Ignored...')
+                        put_log('Ignored... ' + message)
 
                     continue
 
@@ -137,13 +139,11 @@ class Proposition(object):
                             if all(p in nombank_arg.pieces for p in exp_args):
                                 self.exp_args[label] = \
                                     [TreePointer(fileid, sentnum, nombank_arg)]
-                                put_log(message)
-                                put_log('Replaced...')
+                                put_log('Replaced... ' + message)
                                 continue
                         if isinstance(nombank_arg, NombankChainTreePointer):
                             if all(p in nombank_arg.pieces for p in exp_args):
-                                put_log(message)
-                                put_log('Ignored...')
+                                put_log('Ignored... ' + message)
                                 continue
 
                     raise AssertionError(message)
@@ -203,6 +203,23 @@ class Proposition(object):
     def add_candidate(self, candidate):
         check_type(candidate, Candidate)
         self._candidates.append(candidate)
+
+    def parse_arg_corenlp(self, doc, idx_mapping):
+        check_type(doc, Document)
+
+        for label, fillers in self.imp_args.items():
+            for arg_pointer in fillers:
+                sentnum = arg_pointer.sentnum
+                corenlp_sent = doc.get_sent(sentnum)
+                sent_idx_mapping = idx_mapping[sentnum]
+                arg_pointer.parse_corenlp(corenlp_sent, sent_idx_mapping)
+
+        for label, fillers in self.exp_args.items():
+            for arg_pointer in fillers:
+                sentnum = arg_pointer.sentnum
+                corenlp_sent = doc.get_sent(sentnum)
+                sent_idx_mapping = idx_mapping[sentnum]
+                arg_pointer.parse_corenlp(corenlp_sent, sent_idx_mapping)
 
     @classmethod
     def build(cls, instance):

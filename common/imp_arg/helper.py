@@ -104,8 +104,16 @@ predicate_mapping_path = join(cfg.data_path, 'imp_arg', 'predicate_mapping.pkl')
 # default path to store candidate dictionary
 candidate_dict_path = join(cfg.data_path, 'imp_arg', 'candidate_dict.pkl')
 
+# default path to store candidate dictionary with CoreNLP information
+candidate_dict_w_corenlp_path = \
+    join(cfg.data_path, 'imp_arg', 'candidate_dict_w_corenlp.pkl')
+
 # default path to store all propositions
 propositions_path = join(cfg.data_path, 'imp_arg', 'propositions.pkl')
+
+# default path to store all propositions with CoreNLP information
+propositions_w_corenlp_path = \
+    join(cfg.data_path, 'imp_arg', 'propositions_w_corenlp.pkl')
 
 
 def expand_wsj_fileid(fileid, ext=''):
