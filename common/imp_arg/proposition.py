@@ -10,9 +10,7 @@ from common.imp_arg.candidate import Candidate
 from common.imp_arg.tree_pointer import TreePointer
 from dataset.imp_arg import ImplicitArgumentInstance
 from dataset.nltk import PTBReader
-from utils import check_type, get_console_logger
-
-log = get_console_logger()
+from utils import check_type, log
 
 
 class Proposition(object):

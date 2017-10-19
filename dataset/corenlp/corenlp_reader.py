@@ -11,9 +11,7 @@ from common.corenlp import Mention
 from common.corenlp import Sentence
 from common.corenlp import Token
 from utils import consts, convert_corenlp_ner_tag
-from utils import get_console_logger, smart_file_handler
-
-log = get_console_logger()
+from utils import log, smart_file_handler
 
 
 class CoreNLPTarget(object):

@@ -4,9 +4,7 @@ from common import corenlp
 from core_argument import CoreArgument
 from entity import Entity
 from token import Token
-from utils import check_type, consts, get_console_logger, unescape
-
-log = get_console_logger()
+from utils import check_type, consts, log, unescape
 
 
 class Argument(Token):

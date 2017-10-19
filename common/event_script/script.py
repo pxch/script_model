@@ -4,9 +4,7 @@ from itertools import product
 from common import corenlp
 from entity import Entity
 from event import Event
-from utils import check_type, get_console_logger
-
-log = get_console_logger()
+from utils import check_type, log
 
 
 class Script(object):

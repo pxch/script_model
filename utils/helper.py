@@ -3,9 +3,7 @@ from bz2 import BZ2File
 from gzip import GzipFile
 
 import consts
-from logger import get_console_logger
-
-log = get_console_logger()
+from logger import log
 
 
 def suppress_fd(fd_number):

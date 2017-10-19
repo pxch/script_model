@@ -7,9 +7,6 @@ from nltk.corpus.reader.propbank import PropbankTreePointer
 
 from common.imp_arg import helper
 from common.imp_arg.tree_pointer import TreePointer
-from utils import get_console_logger
-
-log = get_console_logger()
 
 
 class Candidate(object):

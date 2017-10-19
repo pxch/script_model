@@ -4,9 +4,7 @@ from zipfile import ZipFile
 
 from config import cfg
 from imp_arg_instance import ImplicitArgumentInstance
-from utils import get_console_logger
-
-log = get_console_logger()
+from utils import log
 
 data_path = cfg.data_path
 

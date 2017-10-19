@@ -6,9 +6,7 @@ from operator import itemgetter
 from common.imp_arg import helper
 from common.imp_arg.candidate import Candidate
 from common.imp_arg.tree_pointer import TreePointer
-from utils import check_type, get_console_logger
-
-log = get_console_logger()
+from utils import check_type, log
 
 
 class CandidateDict(object):

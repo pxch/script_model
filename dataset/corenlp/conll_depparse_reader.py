@@ -3,9 +3,7 @@ from copy import deepcopy
 from common.corenlp import Dependency
 from common.corenlp import Sentence
 from common.corenlp import Token
-from utils import get_console_logger, smart_file_handler
-
-log = get_console_logger()
+from utils import log, smart_file_handler
 
 
 def read_conll_depparse(filename):

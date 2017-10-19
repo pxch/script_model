@@ -1,8 +1,6 @@
 from coreference import Coreference
 from mention import Mention
-from utils import check_type, consts, get_console_logger
-
-log = get_console_logger()
+from utils import check_type, consts, log
 
 
 class Token(object):

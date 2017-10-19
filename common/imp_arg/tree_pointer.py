@@ -8,9 +8,7 @@ from nltk.tree import Tree
 
 from common.corenlp import Sentence
 from dataset.imp_arg import ImplicitArgumentNode
-from utils import check_type, get_console_logger
-
-log = get_console_logger()
+from utils import check_type, log
 
 
 class Subtree(object):

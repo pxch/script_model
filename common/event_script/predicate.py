@@ -2,9 +2,7 @@ import re
 
 from common import corenlp
 from token import Token
-from utils import check_type, escape, get_console_logger, unescape
-
-log = get_console_logger()
+from utils import check_type, escape, unescape
 
 
 class Predicate(Token):

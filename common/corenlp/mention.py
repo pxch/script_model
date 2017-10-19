@@ -1,7 +1,5 @@
 from dependency import DependencyGraph
-from utils import check_type, get_console_logger
-
-log = get_console_logger()
+from utils import check_type, log
 
 
 class Mention(object):

@@ -2,9 +2,7 @@ import re
 
 from argument import Argument
 from predicate import Predicate
-from utils import check_type, get_console_logger
-
-log = get_console_logger()
+from utils import check_type, log
 
 
 class Event(object):

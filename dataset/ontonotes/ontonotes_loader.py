@@ -4,9 +4,7 @@ import on
 from on.common.util import FancyConfigParser
 
 from config import cfg
-from utils import consts, get_console_logger, suppress_fd, restore_fd
-
-log = get_console_logger()
+from utils import consts, log, suppress_fd, restore_fd
 
 
 def get_default_ontonotes_config():

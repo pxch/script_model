@@ -2,9 +2,7 @@ from nltk.tree import Tree
 
 from dependency import Dependency, DependencyGraph
 from token import Token
-from utils import check_type, get_console_logger
-
-log = get_console_logger()
+from utils import check_type, log
 
 
 class Sentence(object):

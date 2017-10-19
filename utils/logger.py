@@ -47,3 +47,8 @@ class PBToLogger(io.StringIO):
 
     def flush(self):
         self.logger.log(self.level, self.buf)
+
+
+log = get_console_logger()
+
+pb_log = PBToLogger(log)

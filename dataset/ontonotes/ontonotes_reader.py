@@ -6,9 +6,7 @@ from on.corpora import coreference, name, subcorpus
 from common.corenlp import *
 from config import cfg
 from dataset.corenlp import read_conll_depparse
-from utils import check_type, convert_ontonotes_ner_tag, get_console_logger
-
-log = get_console_logger()
+from utils import check_type, convert_ontonotes_ner_tag, log
 
 ontonotes_annotations_source = join(cfg.ontonotes_root, 'english/annotations')
 

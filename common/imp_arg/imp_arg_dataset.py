@@ -14,9 +14,7 @@ from config import cfg
 from dataset.corenlp import read_corenlp_doc
 from dataset.imp_arg import imp_arg_instances
 from dataset.nltk import PTBReader, NombankReader, PropbankReader
-from utils import PBToLogger, get_console_logger
-
-log = get_console_logger()
+from utils import log, pb_log
 
 
 class ImplicitArgumentDataset(object):
@@ -234,7 +232,7 @@ class ImplicitArgumentDataset(object):
             nombank_reader=self.nombank_reader,
             max_dist=self._max_dist)
 
-        for instance in tqdm(self._instances_sorted, file=PBToLogger(log),
+        for instance in tqdm(self._instances_sorted, file=pb_log,
                              desc='Processed', ncols=100, mininterval=5):
             pred_node = instance.pred_node
             self._candidate_dict.add_candidates(
@@ -277,7 +275,7 @@ class ImplicitArgumentDataset(object):
 
         ptb_reader = self.ptb_reader
         log.info('Parse subtrees for all explicit / implicit arguments')
-        for proposition in tqdm(self._propositions, file=PBToLogger(log),
+        for proposition in tqdm(self._propositions, file=pb_log,
                                 desc='Processed', ncols=100, mininterval=5):
             proposition.parse_arg_subtrees(ptb_reader)
 

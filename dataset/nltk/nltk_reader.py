@@ -3,9 +3,7 @@ from collections import defaultdict
 
 from config import cfg
 from nltk_corpus import wsj_treebank, propbank, nombank
-from utils import get_console_logger
-
-log = get_console_logger()
+from utils import log
 
 
 class PTBReader(object):
