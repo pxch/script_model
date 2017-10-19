@@ -63,7 +63,7 @@ def escape(text, char_set=consts.escape_char_set):
         if char in consts.escape_char_map:
             text = text.replace(char, consts.escape_char_map[char])
         else:
-            log.warn('escape rule for {} undefined'.format(char))
+            log.warning('escape rule for {} undefined'.format(char))
     return text
 
 
@@ -72,5 +72,5 @@ def unescape(text, char_set=consts.escape_char_set):
         if char in consts.escape_char_map:
             text = text.replace(consts.escape_char_map[char], char)
         else:
-            log.warn('unescape rule for {} undefined'.format(char))
+            log.warning('unescape rule for {} undefined'.format(char))
     return text

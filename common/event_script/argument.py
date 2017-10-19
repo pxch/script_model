@@ -68,7 +68,7 @@ class Argument(Token):
 
     def get_core_argument(self, use_lemma=True):
         if self.has_entity():
-            log.warn(
+            log.warning(
                 'Calling Argument.get_core_argument when it is linked to '
                 'an Entity, should call Entity.get_core_argument instead')
         word = super(Argument, self).get_representation(use_lemma=use_lemma)

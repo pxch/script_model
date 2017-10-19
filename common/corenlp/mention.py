@@ -133,7 +133,7 @@ class Mention(object):
     def set_head_token_idx(self, dep_graph):
         check_type(dep_graph, DependencyGraph)
         if self.head_token_idx != -1:
-            log.warn('Overriding existing head_token_idx {}'.format(
+            log.warning('Overriding existing head_token_idx {}'.format(
                 self.head_token_idx))
         self.head_token_idx = dep_graph.get_head_token_idx(
             self.start_token_idx, self.end_token_idx)

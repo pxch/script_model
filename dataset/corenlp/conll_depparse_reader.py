@@ -27,7 +27,7 @@ def read_conll_depparse(filename):
             except ValueError:
                 continue
             if token_idx == sent.num_tokens:
-                log.warn(
+                log.warning(
                     'line #{} ({}) has duplicated token index, ignored.'.format(
                         line_idx, line.strip().replace('\t', ' ')))
                 continue

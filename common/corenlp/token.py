@@ -89,18 +89,18 @@ class Token(object):
         check_type(coref, Coreference)
         check_type(mention, Mention)
         if self.mention is not None:
-            log.warn(
+            log.warning(
                 'Token ({}) has existing mention ({})'.format(
                     self.pretty_print(), self._mention))
             # TODO: maybe keep the shorter one in nested mentions?
             if self._mention.start_token_idx <= mention.start_token_idx and \
                     self._mention.end_token_idx >= mention.end_token_idx:
-                log.warn(
+                log.warning(
                     'The new mention ({}) is nested in the existing mention, '
                     'ignore the new mention'.format(mention))
                 return
             else:
-                log.warn(
+                log.warning(
                     'Thew new mention ({}) has longer span than the existing '
                     'mention, override existing mention'.format(mention))
         self._coref = coref

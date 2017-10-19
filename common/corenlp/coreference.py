@@ -39,7 +39,7 @@ class Coreference(object):
             if self._rep_mention.has_same_span(rep_mention):
                 return
             else:
-                log.warn('Overriding existing rep_mention ({})'.format(
+                log.warning('Overriding existing rep_mention ({})'.format(
                     self._rep_mention))
                 self._rep_mention.rep = False
         self._rep_mention = rep_mention

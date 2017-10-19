@@ -199,7 +199,7 @@ class Script(object):
             script.add_entity(entity)
 
         if not script.has_entities():
-            log.warn('script {} has no entities'.format(doc.doc_name))
+            log.warning('script {} has no entities'.format(doc.doc_name))
 
         # add all events from document
         for sent in doc.sents:
@@ -231,7 +231,7 @@ class Script(object):
                         'head', pred_token.token_idx, 'compound:prt')
                     if prt_tokens:
                         if len(prt_tokens) > 1:
-                            log.warn(
+                            log.warning(
                                 'Predicate {} contains {} particles'.format(
                                     pred_token.pretty_print(),
                                     len(prt_tokens)))
@@ -259,7 +259,7 @@ class Script(object):
                         script.add_event(event)
 
         if not script.has_events():
-            log.warn('script {} has no events'.format(doc.doc_name))
+            log.warning('script {} has no events'.format(doc.doc_name))
 
         return script
 

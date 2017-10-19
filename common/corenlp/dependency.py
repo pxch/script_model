@@ -145,7 +145,7 @@ class DependencyGraph(object):
                 _, head_idx = self.get_parent(head_trace[-1], msg_prefix)
                 # warn if there is a loop in finding one token's head token
                 if head_idx in head_trace:
-                    log.warn(
+                    log.warning(
                         '{}: In sentence #{}, token #{} has loop in its head '
                         'trace list.'.format(
                             msg_prefix, self._sent_idx, token_idx))
@@ -155,7 +155,7 @@ class DependencyGraph(object):
         head_idx_list = [head_idx for _, head_idx in head_idx_map]
         # warn if the tokens in the range don't have the same head token
         if min(head_idx_list) != max(head_idx_list):
-            log.warn(
+            log.warning(
                 '{}: In sentence #{}, tokens within the range [{}, {}] do not '
                 'have the same head token'.format(
                     msg_prefix, self._sent_idx, start_token_idx, end_token_idx))

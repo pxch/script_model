@@ -22,10 +22,10 @@ class Event(object):
         self._dobj = dobj
 
         if not all(prep != '' for prep, _ in pobj_list):
-            log.warn('some of prepositions in pobj_list are empty')
+            log.warning('some of prepositions in pobj_list are empty')
         for idx, (prep, pobj) in enumerate(pobj_list):
             if prep == '':
-                log.warn(
+                log.warning(
                     'Empty preposition found in #{} of pobj_list'.format(idx))
             check_type(pobj, Argument)
         self._pobj_list = pobj_list
