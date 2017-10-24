@@ -1,6 +1,8 @@
 import io
 import logging
 
+log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
 
 def get_console_logger(level='info'):
     # Prepare a logger
@@ -22,14 +24,17 @@ def get_console_logger(level='info'):
         # Just log to the console
         sh = logging.StreamHandler()
         sh.setLevel(logging.DEBUG)
-        # Put a timestamp on everything
-        formatter = logging.Formatter(
-            '%(asctime)s - %(levelname)s - %(message)s')
-        sh.setFormatter(formatter)
+        sh.setFormatter(log_formatter)
 
         log.addHandler(sh)
 
     return log
+
+
+def add_file_handler(logger, log_path):
+    fileHandler = logging.FileHandler(log_path)
+    fileHandler.setFormatter(log_formatter)
+    logger.addHandler(fileHandler)
 
 
 class PBToLogger(io.StringIO):
