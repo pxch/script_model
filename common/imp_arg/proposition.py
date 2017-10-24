@@ -1,10 +1,10 @@
 from collections import defaultdict
 from copy import deepcopy
 
-from common.corenlp import Document
 from nltk.corpus.reader.nombank import NombankChainTreePointer
 from nltk.corpus.reader.nombank import NombankSplitTreePointer
 
+from common.corenlp import Document
 from common.imp_arg import helper
 from common.imp_arg.candidate import Candidate
 from common.imp_arg.tree_pointer import TreePointer
@@ -27,8 +27,8 @@ class Proposition(object):
         for label, arg_pointers in exp_args.items():
             for arg_pointer in arg_pointers:
                 check_type(arg_pointer, TreePointer)
-
         self._exp_args = exp_args
+
         self._candidates = []
 
     @property
@@ -77,6 +77,13 @@ class Proposition(object):
 
     def num_oracles(self):
         return sum([1 for label in self.imp_args if self.has_oracle(label)])
+
+    def missing_labels(self):
+        missing_labels = []
+        for label in helper.predicate_core_arg_mapping[self.v_pred].keys():
+            if label not in self.exp_args:
+                missing_labels.append(label)
+        return missing_labels
 
     @property
     def exp_args(self):
@@ -197,6 +204,10 @@ class Proposition(object):
             put_log('Remove incorporated label {} of {}, {}'.format(
                 label, self.pred_pointer, self.n_pred))
             self._imp_args.pop(label, None)
+
+    @property
+    def candidates(self):
+        return self._candidates
 
     def add_candidate(self, candidate):
         check_type(candidate, Candidate)
