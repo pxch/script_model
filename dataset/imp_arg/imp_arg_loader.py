@@ -31,7 +31,7 @@ def download_dataset():
     dataset_zip.close()
 
 
-def read_dataset(file_path):
+def read_dataset(file_path=imp_arg_dataset_path):
     log.info('Reading implicit argument dataset from {}'.format(file_path))
 
     all_instances = []

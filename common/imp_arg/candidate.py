@@ -91,3 +91,15 @@ class Candidate(object):
         self._arg_pointer.parse_corenlp(corenlp_sent, sent_idx_mapping)
         for pred_pointer, _, _ in self._pred_pointer_list:
             pred_pointer.parse_corenlp(corenlp_sent, sent_idx_mapping)
+
+    def dice_score(self, imp_args):
+        dice_score = 0.0
+
+        if len(imp_args) > 0:
+            dice_score_list = []
+            for arg in imp_args:
+                dice_score_list.append(self.arg_pointer.dice_score(arg))
+
+            dice_score = max(dice_score_list)
+
+        return dice_score

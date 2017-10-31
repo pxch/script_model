@@ -12,7 +12,7 @@ from common.imp_arg.candidate_dict import CandidateDict
 from common.imp_arg.proposition import Proposition
 from config import cfg
 from dataset.corenlp import read_corenlp_doc
-from dataset.imp_arg import imp_arg_instances
+from dataset.imp_arg import read_dataset
 from dataset.nltk import PTBReader, NombankReader, PropbankReader
 from utils import log, pb_log
 
@@ -23,9 +23,9 @@ class ImplicitArgumentDataset(object):
         self._max_dist = max_dist
 
         # list of all implicit argument instances
-        self._instances = imp_arg_instances
+        self._instances = read_dataset()
         # number of all implicit argument instances
-        self._num_instances = len(imp_arg_instances)
+        self._num_instances = len(self._instances)
 
         # list of all implicit argument instances, sorted by predicate node
         self._instances_sorted = []
@@ -241,9 +241,8 @@ class ImplicitArgumentDataset(object):
         if save_path is not None:
             self._candidate_dict.save(save_path)
 
-    def load_candidate_dict(self, path=helper.candidate_dict_path):
-        self._candidate_dict = CandidateDict.load(
-            path, max_dist=self._max_dist)
+    def load_candidate_dict(self, path):
+        self._candidate_dict = CandidateDict.load(path, max_dist=self._max_dist)
 
     @property
     def propositions(self):
@@ -289,10 +288,10 @@ class ImplicitArgumentDataset(object):
                 helper.propositions_path))
             pkl.dump(self._propositions, open(helper.propositions_path, 'w'))
 
-    def load_propositions(self, path=helper.propositions_path):
+    def load_propositions(self, path):
         log.info('Loading all propositions from {}'.format(path))
         start_time = timeit.default_timer()
-        self._propositions = pkl.load(open(helper.propositions_path, 'r'))
+        self._propositions = pkl.load(open(path, 'r'))
         elapsed = timeit.default_timer() - start_time
         log.info('Done in {:.3f} seconds'.format(elapsed))
 

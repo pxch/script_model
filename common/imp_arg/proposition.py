@@ -1,6 +1,7 @@
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from copy import deepcopy
 
+import numpy as np
 from nltk.corpus.reader.nombank import NombankChainTreePointer
 from nltk.corpus.reader.nombank import NombankSplitTreePointer
 
@@ -229,6 +230,22 @@ class Proposition(object):
                 corenlp_sent = doc.get_sent(sentnum)
                 sent_idx_mapping = idx_mapping[sentnum]
                 arg_pointer.parse_corenlp(corenlp_sent, sent_idx_mapping)
+
+    def get_dice_score_dict(self):
+        dice_score_dict = OrderedDict()
+
+        for row_idx, arg_label in enumerate(self.missing_labels()):
+            if arg_label not in self.imp_args:
+                dice_score_list = [0.] * len(self.candidates)
+            else:
+                dice_score_list = []
+                imp_args = self.imp_args[arg_label]
+                for candidate in self.candidates:
+                    dice_score_list.append(candidate.dice_score(imp_args))
+
+            dice_score_dict[arg_label] = np.array(dice_score_list)
+
+        return dice_score_dict
 
     @classmethod
     def build(cls, instance):

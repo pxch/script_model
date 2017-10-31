@@ -76,8 +76,11 @@ class Subtree(object):
 
 
 class CoreNLPInfo(object):
-    def __init__(self, idx_list, head_idx, entity_idx, mention_idx):
+    def __init__(self, idx_list, word_list, lemma_list, head_idx,
+                 entity_idx, mention_idx):
         self.idx_list = idx_list
+        self.word_list = word_list
+        self.lemma_list = lemma_list
         self.head_idx = head_idx
         self.entity_idx = entity_idx
         self.mention_idx = mention_idx
@@ -87,8 +90,15 @@ class CoreNLPInfo(object):
               msg_prefix=''):
         assert all(idx in sent_idx_mapping for idx in idx_list)
         mapped_idx_list = [sent_idx_mapping.index(idx) for idx in idx_list]
+
+        word_list = []
+        lemma_list = []
         head_idx = -1
         if mapped_idx_list:
+            word_list = [corenlp_sent.get_token(token_idx).word
+                         for token_idx in mapped_idx_list]
+            lemma_list = [corenlp_sent.get_token(token_idx).lemma
+                          for token_idx in mapped_idx_list]
             head_idx = corenlp_sent.dep_graph.get_head_token_idx(
                 mapped_idx_list[0], mapped_idx_list[-1] + 1, msg_prefix)
 
@@ -121,7 +131,8 @@ class CoreNLPInfo(object):
                     mention_idx = \
                         mention_idx_counter.most_common(1)[0][0]
 
-        return cls(mapped_idx_list, head_idx, entity_idx, mention_idx)
+        return cls(mapped_idx_list, word_list, lemma_list, head_idx,
+                   entity_idx, mention_idx)
 
 
 class TreePointer(object):
@@ -159,7 +170,7 @@ class TreePointer(object):
         self._corenlp_list = []
 
         # index of the head piece (0 if not a split pointer)
-        self._head_piece = -1
+        self._head_piece_idx = -1
         # index of the entity the pointer is linked to, -1 otherwise
         self._entity_idx = -1
         # index of the mention the pointer is linked to, -1 otherwise
@@ -241,7 +252,7 @@ class TreePointer(object):
                 head_only=False,
                 msg_prefix=self.fileid))
 
-        self._head_piece = -1
+        self._head_piece_idx = -1
         min_root_path_length = 999
 
         for piece_idx, corenlp_info in enumerate(self.corenlp_list):
@@ -251,12 +262,12 @@ class TreePointer(object):
                 # with same root_path_length, take the latter token
                 if len(root_path) <= min_root_path_length:
                     min_root_path_length = len(root_path)
-                    self._head_piece = piece_idx
+                    self._head_piece_idx = piece_idx
 
         self._entity_idx = -1
         self._mention_idx = -1
 
-        head_corenlp_info = self.corenlp_list[self._head_piece]
+        head_corenlp_info = self.corenlp_list[self._head_piece_idx]
         if head_corenlp_info.entity_idx != -1:
             self._entity_idx = head_corenlp_info.entity_idx
             self._mention_idx = head_corenlp_info.mention_idx
@@ -280,9 +291,24 @@ class TreePointer(object):
     def corenlp_list(self):
         return self._corenlp_list
 
+    def corenlp_idx_list(self):
+        return [idx for corenlp in self.corenlp_list
+                for idx in corenlp.idx_list]
+
+    def corenlp_word_list(self):
+        return [word for corenlp in self.corenlp_list
+                for word in corenlp.word_list]
+
+    def corenlp_lemma_list(self):
+        return [lemma for corenlp in self.corenlp_list
+                for lemma in corenlp.lemma_list]
+
     @property
-    def head_piece(self):
-        return self._head_piece
+    def head_piece_idx(self):
+        return self._head_piece_idx
+
+    def head_piece_corenlp(self):
+        return self._corenlp_list[self.head_piece_idx]
 
     @property
     def entity_idx(self):
@@ -291,6 +317,12 @@ class TreePointer(object):
     @property
     def mention_idx(self):
         return self._mention_idx
+
+    def dice_score(self, other):
+        token_set = set(self.corenlp_lemma_list())
+        other_token_set = set(other.corenlp_lemma_list())
+        return 2.0 * len(token_set.intersection(other_token_set)) / (
+            len(token_set) + len(other_token_set))
 
     def __str__(self):
         return '{}:{}:{}'.format(
