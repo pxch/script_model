@@ -1,2 +1,3 @@
+from dice_eval_metric import DiceEvalMetric
 from imp_arg_dataset import ImplicitArgumentDataset
 from proposition import Proposition
