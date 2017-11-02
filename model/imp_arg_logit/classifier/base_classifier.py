@@ -113,7 +113,6 @@ class BaseClassifier(object):
             grid['class_weight'] = [{0: 1, 1: 2 ** x} for x in range(0, 10)]
         else:
             grid['C'] = [10 ** x for x in range(-4, 5)]
-            # grid['C'] = [1]
             grid['class_weight'] = ['balanced']
         self.param_grid = ParameterGrid(grid)
 

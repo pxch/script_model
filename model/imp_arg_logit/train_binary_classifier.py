@@ -68,8 +68,6 @@ classifier = BinaryClassifier(n_splits=10)
 dataset = ImplicitArgumentDataset()
 classifier.read_dataset(dataset)
 
-classifier.read_dataset(dataset)
-
 sample_list_path = join(path_prefix, 'sample_list.pkl')
 if exists(sample_list_path):
     classifier.load_sample_list(sample_list_path)
