@@ -32,9 +32,11 @@ parser.add_argument('--verbose', action='store_true',
                          'parameter grid on every fold would be printed')
 parser.add_argument('--log_to_file', action='store_true',
                     help='if turned on, logs would be written to file')
+parser.add_argument('--save_results', action='store_true',
+                    help='if turned on, results would be written to file')
 parser.add_argument('--save_models', action='store_true',
                     help='if turned on, all trained models would be saved')
-parser.add_argument('--save_missing_labels', action='store_true',
+parser.add_argument('--predict_missing_labels', action='store_true',
                     help='if turned on, a dictionary of predicted '
                          'missing labels would be saved')
 
@@ -63,13 +65,19 @@ if args.log_to_file:
 
 classifier = BinaryClassifier(n_splits=10)
 
+dataset = ImplicitArgumentDataset()
+classifier.read_dataset(dataset)
+
+classifier.read_dataset(dataset)
+
 sample_list_path = join(path_prefix, 'sample_list.pkl')
 if exists(sample_list_path):
     classifier.load_sample_list(sample_list_path)
 else:
-    dataset = ImplicitArgumentDataset()
-    classifier.read_dataset(
-        dataset, use_list=args.use_list, save_path=sample_list_path)
+    classifier.build_sample_list(
+        use_list=args.use_list, save_path=sample_list_path)
+
+classifier.index_sample_list()
 
 classifier.preprocess_features(args.featurizer)
 
@@ -78,14 +86,19 @@ classifier.set_hyper_parameter(
 
 classifier.cross_validation(use_val=args.use_val, verbose=args.verbose)
 
+fout_results = None
+if args.save_results:
+    results_path = join(path_prefix, 'results-{}.txt'.format(suffix))
+    fout_results = open(results_path, 'w')
+
+classifier.print_stats(fout=fout_results)
+
 if args.save_models:
     model_save_path = join(path_prefix, 'model-{}.pkl'.format(suffix))
     classifier.save_models(model_save_path)
 
-if args.save_missing_labels:
-    classifier.predict_missing_labels()
-
+if args.predict_missing_labels:
     missing_labels_save_path = join(
         path_prefix, 'missing_labels-{}.pkl'.format(suffix))
 
-    classifier.save_missing_labels(missing_labels_save_path)
+    classifier.predict_missing_labels(save_path=missing_labels_save_path)

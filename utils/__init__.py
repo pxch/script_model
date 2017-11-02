@@ -1,3 +1,4 @@
+from .eval_metric import BaseEvalMetric
 from .helper import check_type
 from .helper import convert_corenlp_ner_tag, convert_ontonotes_ner_tag
 from .helper import escape, unescape

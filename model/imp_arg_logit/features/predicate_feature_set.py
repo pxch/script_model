@@ -33,17 +33,9 @@ class PredicateFeatureSet(BaseFeatureSet):
         'p_following_pp_obj_head', 'p_syn_tree_path_to_nearest_pass_verb',
     ]
 
-    def __init__(self, pred_pointer, n_pred, v_pred, **kwargs):
-        super(PredicateFeatureSet, self).__init__(**kwargs)
-        self.pred_pointer = pred_pointer
-        self.n_pred = n_pred
-        self.v_pred = v_pred
-
-    def set_imp_arg(self, iarg_label):
-        core_arg_mapping = helper.predicate_core_arg_mapping[self.v_pred]
-        iarg_type = core_arg_mapping[iarg_label]
-        self._feature_map['nom_p_iarg'] = '-'.join([self.n_pred, iarg_type])
-        self._feature_map['ver_p_iarg'] = '-'.join([self.v_pred, iarg_type])
+    def set_imp_arg(self, iarg_type):
+        self._feature_map['nom_p_iarg'] += '-' + iarg_type
+        self._feature_map['ver_p_iarg'] += '-' + iarg_type
 
     @classmethod
     def build(cls, proposition, doc, idx_mapping, use_list):
@@ -279,4 +271,4 @@ class PredicateFeatureSet(BaseFeatureSet):
         else:
             kwargs['p_syn_tree_path_to_nearest_pass_verb'] = ''
 
-        return cls(pred_pointer, n_pred, v_pred, **kwargs)
+        return cls(**kwargs)

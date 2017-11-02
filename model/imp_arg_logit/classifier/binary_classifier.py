@@ -1,17 +1,17 @@
 import pickle as pkl
 from collections import defaultdict
 from copy import deepcopy
-from os.path import exists
+from operator import itemgetter
 
-import numpy as np
-from sklearn.feature_extraction import DictVectorizer, FeatureHasher
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import ParameterGrid
+from texttable import Texttable
 
 from common.imp_arg import ImplicitArgumentDataset
 from common.imp_arg import helper
 from model.imp_arg_logit.features import PredicateFeatureSet
+from utils import BaseEvalMetric
 from utils import check_type, log
+from .base_classifier import BaseClassifier
 
 
 class BinarySample(object):
@@ -23,264 +23,337 @@ class BinarySample(object):
         self.label = label
 
     @classmethod
-    def from_proposition(cls, proposition, corenlp_mapping, fold_idx_mapping,
+    def from_proposition(cls, proposition, corenlp_mapping, fold_idx,
                          use_list=False):
         sample_list = []
         pred_pointer = proposition.pred_pointer
         idx_mapping, doc = corenlp_mapping[pred_pointer.fileid]
-        fold_idx = fold_idx_mapping[str(pred_pointer)]
 
         predicate_feature_set = PredicateFeatureSet.build(
             proposition, doc, idx_mapping, use_list)
 
         missing_labels = proposition.missing_labels()
 
+        core_arg_mapping = helper.predicate_core_arg_mapping[proposition.v_pred]
+
         for arg_label in missing_labels:
             feature_set = deepcopy(predicate_feature_set)
-            feature_set.set_imp_arg(arg_label)
+
+            iarg_type = core_arg_mapping[arg_label]
+            feature_set.set_imp_arg(iarg_type)
+
             if arg_label in proposition.imp_args:
                 label = 1
             else:
                 label = 0
 
-            sample_list.append(
-                cls(pred_pointer, fold_idx, arg_label, feature_set, label))
+            sample_list.append(cls(
+                str(pred_pointer), fold_idx, arg_label, feature_set, label))
         return sample_list
 
 
-class BinaryClassifier(object):
+class BinaryModelState(object):
+    def __init__(self, logit, val_fold_indices, val_stats, test_fold_idx,
+                 test_stats):
+        self.logit = logit
+        self.val_fold_indices = val_fold_indices
+        self.val_stats = val_stats
+        self.test_fold_idx = test_fold_idx
+        self.test_stats = test_stats
+
+
+class BinaryEvalMetric(BaseEvalMetric):
+    def __init__(self, tp=0, fp=0, fn=0, tn=0):
+        self.tp = tp
+        self.fp = fp
+        self.fn = fn
+        self.tn = tn
+        self.num_all = tp + fp + fn + tn
+        self.num_correct = tp + tn
+        self.num_positive = tp + fn
+
+    def add_metric(self, other):
+        assert isinstance(other, BinaryEvalMetric)
+        self.tp += other.tp
+        self.fp += other.fp
+        self.fn += other.fn
+        self.tn += other.tn
+        self.num_all += other.num_all
+        self.num_correct += other.num_correct
+        self.num_positive += other.num_positive
+
+    def precision(self):
+        if self.tp + self.fp > 0:
+            return 100. * self.tp / (self.tp + self.fp)
+        else:
+            return 0.
+
+    def recall(self):
+        if self.num_positive > 0:
+            return 100. * self.tp / self.num_positive
+        else:
+            return 0.
+
+    def accuracy(self):
+        return 100. * self.num_correct / self.num_all
+
+    def to_text(self):
+        return 'accuracy = {} / {} = {:6.2f} %, {}'.format(
+            self.num_correct, self.num_all, self.accuracy(), str(self))
+
+    @classmethod
+    def eval(cls, predict, gold):
+        assert len(predict) == len(gold)
+        tp = sum([1 for y1, y2 in zip(predict, gold) if y1 == 1 and y2 == 1])
+        fp = sum([1 for y1, y2 in zip(predict, gold) if y1 == 1 and y2 == 0])
+        fn = sum([1 for y1, y2 in zip(predict, gold) if y1 == 0 and y2 == 1])
+        tn = sum([1 for y1, y2 in zip(predict, gold) if y1 == 0 and y2 == 0])
+        return cls(tp=tp, fp=fp, fn=fn, tn=tn)
+
+
+class BinaryClassifier(BaseClassifier):
     def __init__(self, n_splits=10):
-        # number of splits in cross validation
-        self.n_splits = n_splits
+        super(BinaryClassifier, self).__init__(n_splits=n_splits)
 
-        # list of classification samples
-        self.sample_list = []
+        # mapping from pred_pointers to list of sample indices
+        self.pred_pointer_to_sample_idx_list = None
 
-        # Preprocessed features of all samples, should be a sparse matrix
-        self.features = None
-        # Labels of all samples, should be a numpy array
-        self.labels = None
+        # mapping from pred_pointer and list of predicted labels
+        self.all_prediction_mapping = None
 
-        # List of predicted labels of each sample
-        self.labels_pred = []
-        # Mapping from predicate pointer to list of predicted missing labels:
+        # mapping from pred_pointer to list of predicted missing labels
         self.missing_labels_mapping = None
 
-        # Grid of hyper parameters to search
-        self.param_grid = None
-
-        # list of trained logistic regression models for each fold
-        self.logit_list = []
-        # list of best parameters for each fold
-        self.best_param_list = []
-        # list of best validation f1 scores for each fold
-        self.best_val_f1_list = []
-
-    def read_dataset(self, dataset, use_list=False, save_path=None):
+    def read_dataset(self, dataset):
         check_type(dataset, ImplicitArgumentDataset)
-        if not exists(helper.propositions_path):
-            dataset.build_propositions(save_path=helper.propositions_path)
-        else:
-            dataset.load_propositions(helper.propositions_path)
+        log.info('Reading implicit argument dataset')
 
-        corenlp_mapping = dataset.corenlp_mapping
+        dataset.load_propositions(helper.propositions_path)
 
-        log.info('Building predicate feature set for every missing argument '
-                 'label of every propositions')
+        self.dataset = dataset
 
-        fold_idx_mapping = {}
+        self.index_dataset()
 
-        dataset.create_train_test_folds(n_splits=self.n_splits)
-        for fold_idx in range(self.n_splits):
-            test_fold = dataset.get_test_fold(fold_idx)
-            for test_idx in test_fold:
-                key = str(dataset.propositions[test_idx].pred_pointer)
-                fold_idx_mapping[key] = fold_idx
+    def build_sample_list(self, use_list=False, save_path=None):
+        assert self.dataset is not None
+        log.info('Building sample list from every missing argument label '
+                 'of every proposition')
+
+        corenlp_mapping = self.dataset.corenlp_mapping
 
         self.sample_list = []
 
-        for proposition in dataset.propositions:
+        for proposition in self.dataset.propositions:
+            fold_idx = \
+                self.pred_pointer_to_fold_idx[str(proposition.pred_pointer)]
             sample_list = BinarySample.from_proposition(
-                proposition, corenlp_mapping, fold_idx_mapping, use_list)
+                proposition, corenlp_mapping, fold_idx, use_list)
             self.sample_list.extend(sample_list)
 
         if save_path:
             log.info('Saving sample list to {}'.format(save_path))
             pkl.dump(self.sample_list, open(save_path, 'w'))
 
-    def load_sample_list(self, sample_list_path):
-        log.info('Loading sample list from {}'.format(sample_list_path))
-        self.sample_list = pkl.load(open(sample_list_path, 'r'))
+    def index_sample_list(self):
+        super(BinaryClassifier, self).index_sample_list()
 
-    def preprocess_features(self, featurizer='one_hot'):
-        raw_features = [sample.feature_set for sample in self.sample_list]
-        if featurizer == 'one_hot':
-            vec = DictVectorizer()
-            self.features = vec.fit_transform(raw_features)
-        elif featurizer == 'hash':
-            hasher = FeatureHasher()
-            self.features = hasher.transform(raw_features)
-        else:
-            raise ValueError('Unrecognized featurizer: ' + featurizer)
+        self.pred_pointer_to_sample_idx_list = defaultdict(list)
+        log.info('Building mapping from pred_pointer to list of sample indices')
 
-        labels = [sample.label for sample in self.sample_list]
-        self.labels = np.asarray(labels)
+        for sample_idx, sample in enumerate(self.sample_list):
+            pred_pointer = sample.pred_pointer
+            self.pred_pointer_to_sample_idx_list[pred_pointer].append(
+                sample_idx)
 
-    def set_hyper_parameter(self, fit_intercept=True, tune_w=False):
-        self.logit_list = []
-        for fold_idx in range(self.n_splits):
-            logit = LogisticRegression(fit_intercept=fit_intercept)
-            if not tune_w:
-                logit.set_params(class_weight='balanced')
-            self.logit_list.append(logit)
+    def reset_states(self):
+        self.model_list = []
+        self.all_prediction_mapping = {}
 
-        if tune_w:
-            self.param_grid = ParameterGrid({
-                'C': [2 ** x for x in range(-4, 1)],
-                'class_weight': [{0: 1, 1: 2 ** x} for x in range(0, 10)]
-            })
-        else:
-            self.param_grid = ParameterGrid({
-                'C': [10 ** x for x in range(-4, 5)]
-            })
+    def train_model(self, train_features, train_gold, val_fold_indices,
+                    test_fold_idx, verbose=False):
+        best_param = None
+        best_val_f1 = 0
+        best_val_metric = None
 
-    def cross_validation(self, use_val=False, verbose=False):
-        self.labels_pred = np.asarray([-1] * len(self.labels))
-        self.best_param_list = []
-        self.best_val_f1_list = []
+        logit = LogisticRegression()
 
-        fold_idx_list = [sample.fold_idx for sample in self.sample_list]
+        for param in self.param_grid:
+            logit.set_params(**param)
 
-        for fold_idx in range(self.n_splits):
-            test_indices = \
-                [i for i in range(len(fold_idx_list))
-                 if fold_idx_list[i] == fold_idx]
-
-            test_features = self.features[test_indices]
-            test_gold = self.labels[test_indices]
-
-            if use_val:
-                if fold_idx == 0:
-                    val_fold = 9
-                else:
-                    val_fold = fold_idx - 1
-                log.info(
-                    'Test fold #{}, use fold #{} as validation'.format(
-                        fold_idx, val_fold))
-
-                val_indices = \
-                    [i for i in range(len(fold_idx_list))
-                     if fold_idx_list[i] == val_fold]
-                train_indices = \
-                    [i for i in range(len(fold_idx_list))
-                     if fold_idx_list[i] != fold_idx
-                     and fold_idx_list[i] != val_fold]
-
-                val_features = self.features[val_indices]
-                val_gold = self.labels[val_indices]
-
-            else:
-                log.info(
-                    'Test fold #{}, use all training as validation'.format(
-                        fold_idx))
-
-                train_indices = \
-                    [i for i in range(len(fold_idx_list))
-                     if fold_idx_list[i] != fold_idx]
-
-                val_features = self.features[train_indices]
-                val_gold = self.labels[train_indices]
-
-            train_features = self.features[train_indices]
-            train_gold = self.labels[train_indices]
-
-            best_param = {}
-            best_val_f1 = 0
-
-            logit = self.logit_list[fold_idx]
-
-            for param in self.param_grid:
-                logit.set_params(**param)
-
-                logit.fit(train_features, train_gold)
-
-                val_pred = logit.predict(val_features)
-
-                val_f1 = self.eval(
-                    val_pred,
-                    val_gold,
-                    'Fold #{}, params = {}'.format(fold_idx, param),
-                    verbose=verbose
-                )
-
-                if val_f1 > best_val_f1:
-                    best_param = param
-                    best_val_f1 = val_f1
-
-            log.info(
-                'Selecting best param = {}, with validation f1 = {}'.format(
-                    best_param, best_val_f1))
-            self.best_param_list.append(best_param)
-            self.best_val_f1_list.append(best_val_f1)
-
-            logit.set_params(**best_param)
             logit.fit(train_features, train_gold)
 
-            test_pred = logit.predict(test_features)
+            val_prediction_mapping = {}
+            for val_fold_idx in val_fold_indices:
+                val_prediction_mapping.update(
+                    self.predict_fold(logit, val_fold_idx))
 
-            self.eval(
-                test_pred,
-                test_gold,
-                'Test fold #{}'.format(fold_idx),
-                verbose=True
-            )
+            val_metric = self.eval(val_prediction_mapping)
 
-            self.labels_pred[test_indices] = test_pred
+            debug_msg = 'Fold #{}, params = {}, {}'.format(
+                val_fold_indices, param, val_metric.to_text())
 
-        self.eval(self.labels_pred, self.labels, 'Total', verbose=True)
+            if verbose:
+                log.info(debug_msg)
+            else:
+                log.debug(debug_msg)
 
-    @staticmethod
-    def eval(predict, gold, log_msg, verbose=True):
-        tp = sum([1 for y1, y2 in zip(predict, gold) if y1 == 1 and y2 == 1])
-        fp = sum([1 for y1, y2 in zip(predict, gold) if y1 == 1 and y2 == 0])
-        fn = sum([1 for y1, y2 in zip(predict, gold) if y1 == 0 and y2 == 1])
-        tn = sum([1 for y1, y2 in zip(predict, gold) if y1 == 0 and y2 == 0])
+            if val_metric.f1() > best_val_f1:
+                best_param = param
+                best_val_f1 = val_metric.f1()
+                best_val_metric = val_metric
 
-        accuracy = 100. * (tp + tn) / len(gold)
-        precision = 100. * tp / (tp + fp) if tp + fp > 0 else 0
-        recall = 100. * tp / (tp + fn) if tp + fn > 0 else 0
-        f1 = 2. * precision * recall / (precision + recall) \
-            if precision + recall > 0 else 0
+        log.info('-' * 20)
+        log.info(
+            'Selecting best param = {}, with validation f1 = {}'.format(
+                best_param, best_val_f1))
 
-        if verbose:
-            put_log = log.info
-        else:
-            put_log = log.debug
+        logit.set_params(**best_param)
+        logit.fit(train_features, train_gold)
 
-        put_log(
-            '{}: precision = {:6.2f}, recall = {:6.2f}, f1 = {:6.2f}, '
-            'accuracy = {} / {} = {:6.2f} %'.format(
-                log_msg, precision, recall, f1, tp + tn, len(gold), accuracy))
+        test_prediction_mapping = self.predict_fold(logit, test_fold_idx)
 
-        return f1
+        test_metric = self.eval(test_prediction_mapping)
 
-    def predict_missing_labels(self):
+        log.info('Fold #{}, params = {}, {}'.format(
+            test_fold_idx, best_param, test_metric.to_text()))
+
+        model_state = BinaryModelState(
+            logit, val_fold_indices, best_val_metric,
+            test_fold_idx, test_metric)
+
+        self.model_list.append(model_state)
+
+        self.all_prediction_mapping.update(test_prediction_mapping)
+
+    def predict_pred_pointer(self, logit, pred_pointer):
+        sample_idx_list = self.pred_pointer_to_sample_idx_list[pred_pointer]
+        return logit.predict(self.features[sample_idx_list])
+
+    def predict_fold(self, logit, fold_idx):
+        prediction_mapping = {}
+        for pred_pointer in self.fold_idx_to_pred_pointer[fold_idx]:
+            prediction_mapping[pred_pointer] = \
+                self.predict_pred_pointer(logit, pred_pointer)
+        return prediction_mapping
+
+    def eval_pred_pointer(self, pred_pointer, prediction):
+        sample_idx_list = self.pred_pointer_to_sample_idx_list[pred_pointer]
+        gold = self.labels[sample_idx_list]
+        return BinaryEvalMetric.eval(prediction, gold)
+
+    def eval(self, prediction_mapping):
+        eval_metric = BinaryEvalMetric()
+
+        for pred_pointer, prediction in prediction_mapping.items():
+            eval_metric.add_metric(
+                self.eval_pred_pointer(pred_pointer, prediction))
+
+        return eval_metric
+
+    def predict_missing_labels(self, save_path=None):
+        log.info('Predicting missing labels for all predicates')
         self.missing_labels_mapping = defaultdict(list)
 
-        for sample, label_pred in zip(self.sample_list, self.labels_pred):
-            key = str(sample.pred_pointer)
-            if label_pred:
-                self.missing_labels_mapping[key].append(sample.arg_label)
+        for pred_pointer, prediction in self.all_prediction_mapping.items():
+            sample_idx_list = self.pred_pointer_to_sample_idx_list[pred_pointer]
+            arg_label_list = \
+                [self.sample_list[sample_idx].arg_label
+                 for sample_idx in sample_idx_list]
+            for label_pred, arg_label in zip(prediction, arg_label_list):
+                if label_pred:
+                    self.missing_labels_mapping[pred_pointer].append(arg_label)
 
-    def save_missing_labels(self, save_path):
-        log.info('Saving predicted missing labels to {}'.format(save_path))
-        pkl.dump(self.missing_labels_mapping, open(save_path, 'w'))
+        if save_path:
+            log.info('Saving predicted missing labels to {}'.format(save_path))
+            pkl.dump(self.missing_labels_mapping, open(save_path, 'w'))
 
-    def save_models(self, save_path):
-        log.info('Saving models to {}'.format(save_path))
-        models = {
-            'labels_pred': self.labels_pred,
-            'logit_list': self.logit_list,
-            'best_param_list': self.best_param_list,
-            'best_val_f1_list': self.best_val_f1_list}
-        pkl.dump(models, open(save_path, 'w'))
+    def print_stats(self, fout=None):
+        all_metric = BinaryEvalMetric()
+        metric_by_pred = defaultdict(BinaryEvalMetric)
+        metric_by_fold = defaultdict(BinaryEvalMetric)
+
+        for pred_pointer, prediction in self.all_prediction_mapping.items():
+            eval_metric = self.eval_pred_pointer(pred_pointer, prediction)
+
+            all_metric.add_metric(eval_metric)
+
+            n_pred = self.pred_pointer_to_n_pred[pred_pointer]
+            metric_by_pred[n_pred].add_metric(eval_metric)
+
+            fold_idx = self.pred_pointer_to_fold_idx[pred_pointer]
+            metric_by_fold[fold_idx].add_metric(eval_metric)
+
+        log.info('=' * 20)
+        log.info('All: ' + all_metric.to_text())
+
+        pred_table_content = []
+        for n_pred, eval_metric in metric_by_pred.items():
+            table_row = \
+                [n_pred, eval_metric.num_positive, eval_metric.num_all,
+                 eval_metric.accuracy(), eval_metric.precision(),
+                 eval_metric.recall(), eval_metric.f1()]
+            pred_table_content.append(table_row)
+
+        pred_table_content.sort(key=itemgetter(1), reverse=True)
+
+        table_row = \
+            ['overall', all_metric.num_positive, all_metric.num_all,
+             all_metric.accuracy(), all_metric.precision(),
+             all_metric.recall(), all_metric.f1()]
+
+        pred_table_content.append([''] * len(table_row))
+        pred_table_content.append(table_row)
+
+        pred_table_header = ['predicate', '# iarg', '# missing',
+                             'accuracy', 'precision', 'recall', 'f1']
+
+        pred_table = Texttable()
+        pred_table.set_deco(Texttable.BORDER | Texttable.HEADER)
+        pred_table.set_cols_align(['c'] * len(pred_table_header))
+        pred_table.set_cols_valign(['m'] * len(pred_table_header))
+        pred_table.set_cols_width([10] * len(pred_table_header))
+        pred_table.set_precision(2)
+
+        pred_table.header(pred_table_header)
+        for row in pred_table_content:
+            pred_table.add_row(row)
+
+        fold_table_content = []
+        for fold_idx, eval_metric in metric_by_fold.items():
+            table_row = \
+                [fold_idx, eval_metric.num_positive, eval_metric.num_all,
+                 eval_metric.accuracy(), eval_metric.precision(),
+                 eval_metric.recall(), eval_metric.f1()]
+            fold_table_content.append(table_row)
+
+        table_row = \
+            ['overall', all_metric.num_positive, all_metric.num_all,
+             all_metric.accuracy(), all_metric.precision(),
+             all_metric.recall(), all_metric.f1()]
+
+        fold_table_content.append([''] * len(table_row))
+        fold_table_content.append(table_row)
+
+        fold_table_header = ['fold', '# iarg', '# missing',
+                             'accuracy', 'precision', 'recall', 'f1']
+
+        fold_table = Texttable()
+        fold_table.set_deco(Texttable.BORDER | Texttable.HEADER)
+        fold_table.set_cols_align(['c'] * len(fold_table_header))
+        fold_table.set_cols_valign(['m'] * len(fold_table_header))
+        fold_table.set_cols_width([10] * len(fold_table_header))
+        fold_table.set_precision(2)
+
+        fold_table.header(fold_table_header)
+        for row in fold_table_content:
+            fold_table.add_row(row)
+
+        print pred_table.draw()
+        print
+        print fold_table.draw()
+
+        if fout:
+            fout.write(pred_table.draw())
+            fout.write('\n\n')
+            fout.write(fold_table.draw())
+            fout.close()
