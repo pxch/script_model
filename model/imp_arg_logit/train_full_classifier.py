@@ -91,7 +91,7 @@ classifier.set_hyper_parameter(
     fit_intercept=args.fit_intercept, tune_w=args.tune_w)
 
 states = Parallel(n_jobs=args.n_jobs, verbose=10, backend='threading')(
-    delayed(global_train())(
+    delayed(global_train)(
         classifier, test_fold_idx, use_val=args.use_val, verbose=args.verbose)
     for test_fold_idx in range(classifier.n_splits))
 
