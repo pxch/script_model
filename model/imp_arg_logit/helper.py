@@ -41,7 +41,6 @@ quantifier_list = [
     'much', 'little', 'a bit of', 'no', 'a great deal of', 'a good deal of',
 ]
 
-
 indefinite_determiner_list = ['a', 'an']
 
 definite_determiner_list = [
@@ -139,3 +138,7 @@ def get_syn_tree_path(dep_graph, token_idx_1, token_idx_2, msg_prefix=''):
         tree_path.append(label)
 
     return tree_path
+
+
+def global_train(classifier, *args, **kwargs):
+    return classifier.train_model(*args, **kwargs)

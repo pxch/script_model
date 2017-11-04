@@ -117,50 +117,11 @@ class BaseClassifier(object):
         self.param_grid = ParameterGrid(grid)
 
     @abc.abstractmethod
-    def reset_states(self):
+    def train_model(self, test_fold_idx, use_val=False, verbose=False):
         pass
 
-    def cross_validation(self, use_val=False, verbose=False):
-        self.reset_states()
-
-        for test_fold_idx in range(self.n_splits):
-            log.info('=' * 20)
-            if use_val:
-                if test_fold_idx == 0:
-                    val_fold_idx = 9
-                else:
-                    val_fold_idx = test_fold_idx - 1
-
-                val_fold_indices = [val_fold_idx]
-
-                train_sample_indices = \
-                    [sample_idx for sample_idx, fold_idx
-                     in enumerate(self.sample_idx_to_fold_idx)
-                     if fold_idx != test_fold_idx
-                     and fold_idx != val_fold_idx]
-
-            else:
-                val_fold_indices = \
-                    [fi for fi in range(self.n_splits) if fi != test_fold_idx]
-
-                train_sample_indices = \
-                    [sample_idx for sample_idx, fold_idx
-                     in enumerate(self.sample_idx_to_fold_idx)
-                     if fold_idx != test_fold_idx]
-
-            log.info(
-                'Test fold #{}, use fold #{} as validation'.format(
-                    test_fold_idx, val_fold_indices))
-
-            train_features = self.features[train_sample_indices]
-            train_gold = self.labels[train_sample_indices]
-
-            self.train_model(train_features, train_gold, val_fold_indices,
-                             test_fold_idx, verbose=verbose)
-
     @abc.abstractmethod
-    def train_model(self, train_features, train_gold, val_fold_indices,
-                    test_fold_idx, verbose=False):
+    def set_states(self, states):
         pass
 
     def save_models(self, save_path):

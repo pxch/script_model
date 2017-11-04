@@ -2,9 +2,12 @@ import argparse
 from os import makedirs
 from os.path import exists, join
 
+from joblib import Parallel, delayed
+
 from common.imp_arg import ImplicitArgumentDataset
 from config import cfg
 from model.imp_arg_logit.classifier import BinaryClassifier
+from model.imp_arg_logit.helper import global_train
 from utils import add_file_handler, log
 
 parser = argparse.ArgumentParser()
@@ -39,6 +42,8 @@ parser.add_argument('--save_models', action='store_true',
 parser.add_argument('--predict_missing_labels', action='store_true',
                     help='if turned on, a dictionary of predicted '
                          'missing labels would be saved')
+parser.add_argument('--n_jobs', default=1, type=int,
+                    help='number of parallel jobs, default = 1')
 
 args = parser.parse_args()
 
@@ -82,7 +87,12 @@ classifier.preprocess_features(args.featurizer)
 classifier.set_hyper_parameter(
     fit_intercept=args.fit_intercept, tune_w=args.tune_w)
 
-classifier.cross_validation(use_val=args.use_val, verbose=args.verbose)
+states = Parallel(n_jobs=args.n_jobs, verbose=10, backend='threading')(
+    delayed(global_train)(
+        classifier, test_fold_idx, use_val=args.use_val, verbose=args.verbose)
+    for test_fold_idx in range(classifier.n_splits))
+
+classifier.set_states(states)
 
 fout_results = None
 if args.save_results:

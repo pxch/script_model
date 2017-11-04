@@ -169,8 +169,45 @@ class BinaryClassifier(BaseClassifier):
         self.model_list = []
         self.all_prediction_mapping = {}
 
-    def train_model(self, train_features, train_gold, val_fold_indices,
-                    test_fold_idx, verbose=False):
+    def train_model(self, test_fold_idx, use_val=False, verbose=False):
+        if use_val:
+            if test_fold_idx == 0:
+                val_fold_idx = 9
+            else:
+                val_fold_idx = test_fold_idx - 1
+
+            val_fold_indices = [val_fold_idx]
+
+            train_sample_indices = \
+                [sample_idx for sample_idx, fold_idx
+                 in enumerate(self.sample_idx_to_fold_idx)
+                 if fold_idx != test_fold_idx
+                 and fold_idx != val_fold_idx]
+
+        else:
+            val_fold_indices = \
+                [fi for fi in range(self.n_splits) if fi != test_fold_idx]
+
+            train_sample_indices = \
+                [sample_idx for sample_idx, fold_idx
+                 in enumerate(self.sample_idx_to_fold_idx)
+                 if fold_idx != test_fold_idx]
+        log.info('=' * 20)
+        log.info(
+            'Test fold #{}, use fold #{} as validation'.format(
+                test_fold_idx, val_fold_indices))
+
+        train_features = self.features[train_sample_indices]
+        train_gold = self.labels[train_sample_indices]
+
+        val_sample_indices = \
+            [sample_idx for sample_idx, fold_idx
+             in enumerate(self.sample_idx_to_fold_idx)
+             if fold_idx in val_fold_indices]
+
+        val_features = self.features[val_sample_indices]
+        val_gold = self.labels[val_sample_indices]
+
         best_param = None
         best_val_f1 = 0
         best_val_metric = None
@@ -182,14 +219,10 @@ class BinaryClassifier(BaseClassifier):
 
             logit.fit(train_features, train_gold)
 
-            val_prediction_mapping = {}
-            for val_fold_idx in val_fold_indices:
-                val_prediction_mapping.update(
-                    self.predict_fold(logit, val_fold_idx))
+            val_metric = BinaryEvalMetric.eval(
+                logit.predict(val_features), val_gold)
 
-            val_metric = self.eval(val_prediction_mapping)
-
-            debug_msg = 'Fold #{}, params = {}, {}'.format(
+            debug_msg = 'Validation fold #{}, params = {}, {}'.format(
                 val_fold_indices, param, val_metric.to_text())
 
             if verbose:
@@ -204,8 +237,9 @@ class BinaryClassifier(BaseClassifier):
 
         log.info('-' * 20)
         log.info(
-            'Selecting best param = {}, with validation f1 = {}'.format(
-                best_param, best_val_f1))
+            'Validation fold #{}, selecting best param = {}, '
+            'with validation f1 = {}'.format(
+                val_fold_indices, best_param, best_val_f1))
 
         logit.set_params(**best_param)
         logit.fit(train_features, train_gold)
@@ -214,16 +248,21 @@ class BinaryClassifier(BaseClassifier):
 
         test_metric = self.eval(test_prediction_mapping)
 
-        log.info('Fold #{}, params = {}, {}'.format(
+        log.info('Test fold #{}, params = {}, {}'.format(
             test_fold_idx, best_param, test_metric.to_text()))
 
         model_state = BinaryModelState(
             logit, val_fold_indices, best_val_metric,
             test_fold_idx, test_metric)
 
-        self.model_list.append(model_state)
+        return model_state, test_prediction_mapping
 
-        self.all_prediction_mapping.update(test_prediction_mapping)
+    def set_states(self, states):
+        self.model_list = []
+        self.all_prediction_mapping = {}
+        for model_state, test_prediction_mapping in states:
+            self.model_list.append(model_state)
+            self.all_prediction_mapping.update(test_prediction_mapping)
 
     def predict_pred_pointer(self, logit, pred_pointer):
         sample_idx_list = self.pred_pointer_to_sample_idx_list[pred_pointer]

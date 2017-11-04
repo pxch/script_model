@@ -178,12 +178,37 @@ class FullClassifier(BaseClassifier):
                 sample_idx_dict.values()[0][0],
                 sample_idx_dict.values()[-1][-1] + 1)
 
-    def reset_states(self):
-        self.model_list = []
-        self.all_score_matrix_mapping = []
+    def train_model(self, test_fold_idx, use_val=False, verbose=False):
+        if use_val:
+            if test_fold_idx == 0:
+                val_fold_idx = 9
+            else:
+                val_fold_idx = test_fold_idx - 1
 
-    def train_model(self, train_features, train_gold, val_fold_indices,
-                    test_fold_idx, verbose=False):
+            val_fold_indices = [val_fold_idx]
+
+            train_sample_indices = \
+                [sample_idx for sample_idx, fold_idx
+                 in enumerate(self.sample_idx_to_fold_idx)
+                 if fold_idx != test_fold_idx
+                 and fold_idx != val_fold_idx]
+
+        else:
+            val_fold_indices = \
+                [fi for fi in range(self.n_splits) if fi != test_fold_idx]
+
+            train_sample_indices = \
+                [sample_idx for sample_idx, fold_idx
+                 in enumerate(self.sample_idx_to_fold_idx)
+                 if fold_idx != test_fold_idx]
+        log.info('=' * 20)
+        log.info(
+            'Test fold #{}, use fold #{} as validation'.format(
+                test_fold_idx, val_fold_indices))
+
+        train_features = self.features[train_sample_indices]
+        train_gold = self.labels[train_sample_indices]
+
         best_param = None
         best_thres = -1
         best_val_f1 = 0
@@ -204,8 +229,9 @@ class FullClassifier(BaseClassifier):
             thres, val_metric = \
                 self.search_threshold(val_score_matrix_mapping)
 
-            debug_msg = 'Fold #{}, params = {}, thres = {:.2f}, {}'.format(
-                val_fold_indices, param, thres, val_metric.to_text())
+            debug_msg = \
+                'Validation fold #{}, params = {}, thres = {:.2f}, {}'.format(
+                    val_fold_indices, param, thres, val_metric.to_text())
 
             if verbose:
                 log.info(debug_msg)
@@ -220,9 +246,9 @@ class FullClassifier(BaseClassifier):
 
         log.info('-' * 20)
         log.info(
-            'Selecting best param = {}, thres = {:.2f} with '
-            'validation f1 = {}'.format(
-                best_param, best_thres, best_val_f1))
+            'Validation ford #{}, selecting best param = {}, thres = {:.2f} '
+            'with validation f1 = {}'.format(
+                val_fold_indices, best_param, best_thres, best_val_f1))
 
         logit.set_params(**best_param)
         logit.fit(train_features, train_gold)
@@ -233,7 +259,7 @@ class FullClassifier(BaseClassifier):
         test_metric = self.eval(test_score_matrix_mapping, best_thres)
 
         log.info(
-            'Fold #{}, params = {}, thres = {:.2f}, {}'.format(
+            'Test fold #{}, params = {}, thres = {:.2f}, {}'.format(
                 test_fold_idx, best_param, best_thres, test_metric.to_text()))
 
         model_state = FullModelState(
@@ -241,10 +267,15 @@ class FullClassifier(BaseClassifier):
             val_fold_indices, best_val_metric,
             test_fold_idx, test_metric)
 
-        self.model_list.append(model_state)
+        return model_state, test_score_matrix_mapping, best_thres
 
-        self.all_score_matrix_mapping.append(
-            (test_score_matrix_mapping, best_thres))
+    def set_states(self, states):
+        self.model_list = []
+        self.all_score_matrix_mapping = []
+        for model_state, test_score_matrix_mapping, best_thres in states:
+            self.model_list.append(model_state)
+            self.all_score_matrix_mapping.append(
+                (test_score_matrix_mapping, best_thres))
 
     def predict_pred_pointer(self, logit, pred_pointer, post_process=False):
         sample_idx_dict = \
