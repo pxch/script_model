@@ -1,27 +1,21 @@
-import abc
 from collections import OrderedDict
 
 
-class BaseFeatureSet(object):
-    __metaclass__ = abc.ABCMeta
-
-    feature_list = None
-
-    def __init__(self, **kwargs):
+class FeatureSet(object):
+    def __init__(self, feature_map):
+        self._feature_list = []
         self._feature_map = OrderedDict()
-        self._feature_val_list = []
-        for feature in self.feature_list:
-            assert feature in kwargs, 'feature {} not found'.format(feature)
-            self._feature_map[feature] = kwargs[feature]
-            self._feature_val_list.append(kwargs[feature])
+        for feature, value in feature_map.items():
+            self._feature_list.append(feature)
+            self._feature_map[feature] = value
+
+    @property
+    def feature_list(self):
+        return self._feature_list
 
     @property
     def feature_map(self):
         return self._feature_map
-
-    @property
-    def feature_val_list(self):
-        return self._feature_val_list
 
     def get_feature(self, feature):
         assert feature in self.feature_list, \
@@ -45,3 +39,13 @@ class BaseFeatureSet(object):
                     key_val_list.append((key, val))
         for key, val in key_val_list:
             yield key, val
+
+    @classmethod
+    def merge(cls, *args):
+        feature_map = OrderedDict()
+
+        for feature_set in args:
+            for feature in feature_set.feature_list:
+                feature_map[feature] = feature_set.get_feature(feature)
+
+        return cls(feature_map)

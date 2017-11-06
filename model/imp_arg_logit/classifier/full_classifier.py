@@ -10,8 +10,8 @@ from texttable import Texttable
 from common.imp_arg import DiceEvalMetric
 from common.imp_arg import ImplicitArgumentDataset
 from common.imp_arg import helper
+from model.imp_arg_logit.features import FeatureSet
 from model.imp_arg_logit.features import FillerFeatureSet, PredicateFeatureSet
-from model.imp_arg_logit.features.full_feature_set import FullFeatureSet
 from utils import check_type, log
 from .base_classifier import BaseClassifier
 
@@ -50,7 +50,7 @@ class FullSample(object):
                     proposition, doc, arg_label, candidate.arg_pointer,
                     use_list=use_list)
 
-                full_feature_set = FullFeatureSet.merge(
+                full_feature_set = FeatureSet.merge(
                     predicate_feature_set, filler_feature_set)
 
                 label = 0

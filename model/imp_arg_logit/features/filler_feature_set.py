@@ -8,32 +8,32 @@ from common.corenlp import Document
 from common.imp_arg.proposition import Proposition
 from common.imp_arg.tree_pointer import TreePointer
 from model.imp_arg_logit import helper
-from model.imp_arg_logit.features.base_feature_set import BaseFeatureSet
+from model.imp_arg_logit.features.feature_set import FeatureSet
 from utils import check_type
 
+filler_feature_list = [
+    # features on primary filler only
+    'c_p_dist', 'c_syn_cat_ver_p_iarg', 'c_p_arg_to_same_pred?',
+    # features on all fillers in the coreference chain
+    'num_elem',
+    # features on sentence distances
+    'min_f_p_dist', 'max_f_p_dist', 'avg_f_p_dist',
+    # features on the count and percentage of fillers in coreference
+    'per_cop_subj_p_obj', 'per_cop_obj_p_subj',
+    'per_cop_subj', 'per_cop_obj',
+    'per_indefinite_np', 'per_definite_np', 'per_quantified_np',
+    'per_sentential_subj',
+    'num_arg_to_other_pred', 'per_arg_to_other_pred',
+    # features on the head word of each filler
+    'f_head_ver_p_iarg', 'f_head_synset_ver_p_iarg',
+    # features on the predicate of each filler
+    'pf_argf_p_iarg', 'pf_synset_argf_p_synset_iarg', 'argf_iarg_same?',
+    # 'min_wup_sim_pf_p'
+    # TODO: add corpus statistics features
+]
 
-class FillerFeatureSet(BaseFeatureSet):
-    feature_list = [
-        # features on primary filler only
-        'c_p_dist', 'c_syn_cat_ver_p_iarg', 'c_p_arg_to_same_pred?',
-        # features on all fillers in the coreference chain
-        'num_elem',
-        # features on sentence distances
-        'min_f_p_dist', 'max_f_p_dist', 'avg_f_p_dist',
-        # features on the count and percentage of fillers in coreference
-        'num_arg_to_other_pred', 'per_arg_to_other_pred',
-        'per_cop_subj_p_obj', 'per_cop_obj_p_subj',
-        'per_cop_subj', 'per_cop_obj',
-        'per_indefinite_np', 'per_definite_np', 'per_quantified_np',
-        'per_sentential_subj',
-        # features on the head word of each filler
-        'f_head_ver_p_iarg', 'f_head_synset_ver_p_iarg',
-        # features on the predicate of each filler
-        'pf_argf_p_iarg', 'pf_synset_argf_p_synset_iarg', 'argf_iarg_same?',
-        # 'min_wup_sim_pf_p'
-        # TODO: add corpus statistics features
-    ]
 
+class FillerFeatureSet(FeatureSet):
     @classmethod
     def build(cls, proposition, doc, iarg, c_filler, use_list):
         check_type(proposition, Proposition)
@@ -51,9 +51,9 @@ class FillerFeatureSet(BaseFeatureSet):
         c_sentnum = c_filler.sentnum
         c_sent = doc.get_sent(c_sentnum)
 
-        kwargs = OrderedDict()
+        feature_map = OrderedDict()
 
-        kwargs['c_p_dist'] = p_sentnum - c_sentnum
+        feature_map['c_p_dist'] = p_sentnum - c_sentnum
 
         c_idx_list = \
             [idx for corenlp in c_filler.corenlp_list
@@ -73,11 +73,11 @@ class FillerFeatureSet(BaseFeatureSet):
         core_arg_mapping = helper.predicate_core_arg_mapping[v_pred]
         iarg_label = core_arg_mapping[iarg]
 
-        kwargs['c_syn_cat_ver_p_iarg'] = '-'.join([
+        feature_map['c_syn_cat_ver_p_iarg'] = '-'.join([
             c_subtree.label(), v_pred, iarg_label])
 
         # TODO: is it correct to just match c_head_idx?
-        kwargs['c_p_arg_to_same_pred?'] = 0
+        feature_map['c_p_arg_to_same_pred?'] = 0
         if c_sentnum == p_sentnum:
             for pred_idx, pred_token in enumerate(p_sent.tokens):
                 if pred_token.pos.startswith('VB'):
@@ -98,7 +98,7 @@ class FillerFeatureSet(BaseFeatureSet):
                         arg_idx_list.append(pobj.token_idx)
 
                     if p_idx in arg_idx_list and c_head_idx in arg_idx_list:
-                        kwargs['c_p_arg_to_same_pred?'] = 1
+                        feature_map['c_p_arg_to_same_pred?'] = 1
                         break
 
         # build the coreference chain for the primary filler
@@ -122,7 +122,7 @@ class FillerFeatureSet(BaseFeatureSet):
             coreference.add_mention(mention)
 
         num_fillers = coreference.num_mentions
-        kwargs['num_elem'] = num_fillers
+        feature_map['num_elem'] = num_fillers
 
         # build a map from sentence indices to list of pred-arg pairs
         pred_arg_list_map = {}
@@ -280,33 +280,33 @@ class FillerFeatureSet(BaseFeatureSet):
                     pred_f_synset_id = pred_f_synsets[0].name()
             filler_features['pred_f_synset_id'].append(pred_f_synset_id)
 
-        kwargs['min_f_p_dist'] = min(filler_features['f_p_dist'])
-        kwargs['max_f_p_dist'] = max(filler_features['f_p_dist'])
-        kwargs['avg_f_p_dist'] = \
+        feature_map['min_f_p_dist'] = min(filler_features['f_p_dist'])
+        feature_map['max_f_p_dist'] = max(filler_features['f_p_dist'])
+        feature_map['avg_f_p_dist'] = \
             float(sum(filler_features['f_p_dist'])) / num_fillers
 
-        kwargs['per_cop_subj_p_obj'] = \
+        feature_map['per_cop_subj_p_obj'] = \
             float(sum(filler_features['cop_subj_p_obj'])) / num_fillers
-        kwargs['per_cop_obj_p_subj'] = \
+        feature_map['per_cop_obj_p_subj'] = \
             float(sum(filler_features['cop_obj_p_subj'])) / num_fillers
-        kwargs['per_cop_subj'] = \
+        feature_map['per_cop_subj'] = \
             float(sum(filler_features['cop_subj'])) / num_fillers
-        kwargs['per_cop_obj'] = \
+        feature_map['per_cop_obj'] = \
             float(sum(filler_features['cop_obj'])) / num_fillers
 
-        kwargs['per_indefinite_np'] = \
+        feature_map['per_indefinite_np'] = \
             float(sum(filler_features['indefinite_np'])) / num_fillers
-        kwargs['per_definite_np'] = \
+        feature_map['per_definite_np'] = \
             float(sum(filler_features['definite_np'])) / num_fillers
-        kwargs['per_quantified_np'] = \
+        feature_map['per_quantified_np'] = \
             float(sum(filler_features['quantified_np'])) / num_fillers
 
-        kwargs['per_sentential_subj'] = \
+        feature_map['per_sentential_subj'] = \
             float(sum(filler_features['sentential_subj'])) / num_fillers
 
-        kwargs['num_arg_to_other_pred'] = \
+        feature_map['num_arg_to_other_pred'] = \
             sum(filler_features['arg_to_other_pred'])
-        kwargs['per_arg_to_other_pred'] = \
+        feature_map['per_arg_to_other_pred'] = \
             float(sum(filler_features['arg_to_other_pred'])) / num_fillers
 
         # TODO: should it be concatenated with dash or just list?
@@ -314,17 +314,18 @@ class FillerFeatureSet(BaseFeatureSet):
             ['-'.join([head_lemma, v_pred, iarg_label]) for head_lemma
              in filler_features['head_lemma']]
         if use_list:
-            kwargs['f_head_ver_p_iarg'] = f_head_ver_p_iarg_list
+            feature_map['f_head_ver_p_iarg'] = f_head_ver_p_iarg_list
         else:
-            kwargs['f_head_ver_p_iarg'] = '-'.join(f_head_ver_p_iarg_list)
+            feature_map['f_head_ver_p_iarg'] = '-'.join(f_head_ver_p_iarg_list)
 
         f_head_synset_ver_p_iarg_list = \
             ['-'.join([head_synset_id, v_pred, iarg_label]) for head_synset_id
              in filler_features['head_synset_id'] if head_synset_id]
         if use_list:
-            kwargs['f_head_synset_ver_p_iarg'] = f_head_synset_ver_p_iarg_list
+            feature_map['f_head_synset_ver_p_iarg'] = \
+                f_head_synset_ver_p_iarg_list
         else:
-            kwargs['f_head_synset_ver_p_iarg'] = \
+            feature_map['f_head_synset_ver_p_iarg'] = \
                 '-'.join(f_head_synset_ver_p_iarg_list)
 
         # TODO: should the fillers without predicates just be dropped?
@@ -336,9 +337,9 @@ class FillerFeatureSet(BaseFeatureSet):
                 filler_features['arg_f_label'])
              if pred_f_lemma and arg_f_label]
         if use_list:
-            kwargs['pf_argf_p_iarg'] = pf_argf_p_iarg_list
+            feature_map['pf_argf_p_iarg'] = pf_argf_p_iarg_list
         else:
-            kwargs['pf_argf_p_iarg'] = '-'.join(pf_argf_p_iarg_list)
+            feature_map['pf_argf_p_iarg'] = '-'.join(pf_argf_p_iarg_list)
 
         p_synset_id = helper.nominal_predicate_synset_mapping[n_pred]
         pf_synset_argf_p_synset_iarg_list = \
@@ -349,13 +350,13 @@ class FillerFeatureSet(BaseFeatureSet):
                 filler_features['arg_f_label'])
              if pred_f_synset_id and arg_f_label]
         if use_list:
-            kwargs['pf_synset_argf_p_synset_iarg'] = \
+            feature_map['pf_synset_argf_p_synset_iarg'] = \
                 pf_synset_argf_p_synset_iarg_list
         else:
-            kwargs['pf_synset_argf_p_synset_iarg'] = \
+            feature_map['pf_synset_argf_p_synset_iarg'] = \
                 '-'.join(pf_synset_argf_p_synset_iarg_list)
 
-        kwargs['argf_iarg_same?'] = \
+        feature_map['argf_iarg_same?'] = \
             1 if iarg_label in filler_features['arg_f_label'] else 0
 
         # p_synset = wn.synset(p_synset_id)
@@ -365,8 +366,11 @@ class FillerFeatureSet(BaseFeatureSet):
         #         pred_f_synset = wn.synset(pred_f_synset_id)
         #         wup_sim_list.append(p_synset.wup_similarity(pred_f_synset))
         # if wup_sim_list:
-        #     kwargs['min_wup_sim_pf_p'] = min(wup_sim_list)
+        #     feature_map['min_wup_sim_pf_p'] = min(wup_sim_list)
         # else:
-        #     kwargs['min_wup_sim_pf_p'] = 0.0
+        #     feature_map['min_wup_sim_pf_p'] = 0.0
 
-        return cls(**kwargs)
+        filler_feature_set = cls(feature_map)
+        assert filler_feature_set.feature_list == filler_feature_list
+
+        return filler_feature_set
