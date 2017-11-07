@@ -54,6 +54,19 @@ class PBToLogger(io.StringIO):
         self.logger.log(self.level, self.buf)
 
 
+def get_file_logger(name, file_path, log_level='info', propagate=False):
+    log = logging.getLogger(name)
+    log.propagate = propagate
+    log.setLevel(getattr(logging, log_level.upper()))
+
+    assert not log.handlers
+    fileHandler = logging.FileHandler(file_path, mode='w')
+    fileHandler.setFormatter(log_formatter)
+    log.addHandler(fileHandler)
+
+    return log
+
+
 log = get_console_logger()
 
 pb_log = PBToLogger(log)

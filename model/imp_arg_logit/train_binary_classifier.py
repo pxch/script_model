@@ -89,7 +89,9 @@ classifier.set_hyper_parameter(
 
 states = Parallel(n_jobs=args.n_jobs, verbose=10, backend='threading')(
     delayed(global_train)(
-        classifier, test_fold_idx, use_val=args.use_val, verbose=args.verbose)
+        classifier, test_fold_idx,
+        log_path_prefix=join(path_prefix, 'log-{}'.format(suffix)),
+        use_val=args.use_val, verbose=args.verbose)
     for test_fold_idx in range(classifier.n_splits))
 
 classifier.set_states(states)

@@ -40,6 +40,13 @@ class FeatureSet(object):
         for key, val in key_val_list:
             yield key, val
 
+    def get_subset(self, feature_sublist=None):
+        feature_map = OrderedDict()
+        for feature in feature_sublist:
+            assert feature in self.feature_list
+            feature_map[feature] = self.get_feature(feature)
+        return FeatureSet(feature_map)
+
     @classmethod
     def merge(cls, *args):
         feature_map = OrderedDict()

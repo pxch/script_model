@@ -32,9 +32,16 @@ class BaseClassifier(object):
         # mapping from sample indices to fold indices
         self.sample_idx_to_fold_idx = None
 
-        # preprocessed features of all samples, a sparse matrix
+        # list of raw features of all samples,
+        # can be transformed to vectorized features by self.transformer
+        self.raw_features = None
+        # transformer for raw features,
+        # can be either a DictVectorizer or aFeatureHasher
+        self.transformer = None
+
+        # list of preprocessed features of all samples, a sparse matrix
         self.features = None
-        # labels of all samples, a numpy array
+        # list of labels of all samples, a numpy array
         self.labels = None
 
         # grid of hyper parameters to search
@@ -92,15 +99,16 @@ class BaseClassifier(object):
     def preprocess_features(self, featurizer='one_hot'):
         log.info('Processing features with {} featurizer'.format(featurizer))
 
-        raw_features = [sample.feature_set for sample in self.sample_list]
+        self.raw_features = [sample.feature_set for sample in self.sample_list]
         if featurizer == 'one_hot':
-            vec = DictVectorizer()
-            self.features = vec.fit_transform(raw_features)
+            self.transformer = DictVectorizer()
+            self.transformer.fit(self.raw_features)
         elif featurizer == 'hash':
-            hasher = FeatureHasher()
-            self.features = hasher.transform(raw_features)
+            self.transformer = FeatureHasher()
         else:
             raise ValueError('Unrecognized featurizer: ' + featurizer)
+
+        self.features = self.transformer.transform(self.raw_features)
 
         labels = [sample.label for sample in self.sample_list]
         self.labels = np.asarray(labels)
@@ -112,13 +120,10 @@ class BaseClassifier(object):
             grid['C'] = [2 ** x for x in range(-4, 1)]
             grid['class_weight'] = [{0: 1, 1: 2 ** x} for x in range(0, 10)]
         else:
-            grid['C'] = [10 ** x for x in range(-4, 5)]
+            # grid['C'] = [10 ** x for x in range(-4, 5)]
+            grid['C'] = [1]
             grid['class_weight'] = ['balanced']
         self.param_grid = ParameterGrid(grid)
-
-    @abc.abstractmethod
-    def train_model(self, test_fold_idx, use_val=False, verbose=False):
-        pass
 
     @abc.abstractmethod
     def set_states(self, states):
