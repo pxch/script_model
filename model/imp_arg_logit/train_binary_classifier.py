@@ -87,14 +87,19 @@ classifier.preprocess_features(args.featurizer)
 classifier.set_hyper_parameter(
     fit_intercept=args.fit_intercept, tune_w=args.tune_w)
 
-states = Parallel(n_jobs=args.n_jobs, verbose=10, backend='threading')(
-    delayed(global_train)(
-        classifier, test_fold_idx,
-        log_path_prefix=join(path_prefix, 'log-{}'.format(suffix)),
-        use_val=args.use_val, verbose=args.verbose)
-    for test_fold_idx in range(classifier.n_splits))
+model_state_list = Parallel(
+    n_jobs=args.n_jobs, verbose=10, backend='multiprocessing')(
+        delayed(global_train)(
+            classifier, test_fold_idx,
+            use_val=args.use_val, verbose=args.verbose, log_to_file=True,
+            log_file_path=join(path_prefix, 'log-{}'.format(suffix)))
+        for test_fold_idx in range(classifier.n_splits))
 
-classifier.set_states(states)
+classifier.set_model_states(model_state_list)
+
+if args.save_models:
+    model_save_path = join(path_prefix, 'model-{}.pkl'.format(suffix))
+    classifier.save_models(model_save_path)
 
 fout_results = None
 if args.save_results:
@@ -102,10 +107,6 @@ if args.save_results:
     fout_results = open(results_path, 'w')
 
 classifier.print_stats(fout=fout_results)
-
-if args.save_models:
-    model_save_path = join(path_prefix, 'model-{}.pkl'.format(suffix))
-    classifier.save_models(model_save_path)
 
 if args.predict_missing_labels:
     missing_labels_save_path = join(

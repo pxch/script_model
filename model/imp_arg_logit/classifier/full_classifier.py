@@ -12,8 +12,8 @@ from common.imp_arg import ImplicitArgumentDataset
 from common.imp_arg import helper
 from model.imp_arg_logit.features import FeatureSet
 from model.imp_arg_logit.features import FillerFeatureSet, PredicateFeatureSet
-from utils import check_type, log
-from .base_classifier import BaseClassifier
+from utils import check_type, log, get_file_logger
+from .base_classifier import BaseClassifier, BaseModelState
 
 
 class FullSample(object):
@@ -64,15 +64,14 @@ class FullSample(object):
         return sample_list
 
 
-class FullModelState(object):
-    def __init__(self, logit, thres, val_fold_indices, val_metric,
-                 test_fold_idx, test_metric):
-        self.logit = logit
+class FullModelState(BaseModelState):
+    def __init__(self, logit, param, feature_list, thres, test_fold_idx,
+                 val_fold_indices, val_metric):
+        super(FullModelState, self).__init__(
+            logit=logit, param=param, feature_list=feature_list,
+            test_fold_idx=test_fold_idx, val_fold_indices=val_fold_indices,
+            val_metric=val_metric)
         self.thres = thres
-        self.val_fold_indices = val_fold_indices
-        self.val_metric = val_metric
-        self.test_fold_idx = test_fold_idx
-        self.test_metric = test_metric
 
 
 class FullClassifier(BaseClassifier):
@@ -88,9 +87,8 @@ class FullClassifier(BaseClassifier):
 
         # mapping from pred_pointers to dictionary of sample indices
         self.pred_pointer_to_sample_idx_dict = None
-
-        # list of test_score_matrix_mapping and best_thres for each fold
-        self.all_score_matrix_mapping = []
+        # mapping from pred_pointers to dictionary of raw features
+        self.pred_pointer_to_raw_features_dict = None
 
     def read_dataset(self, dataset):
         check_type(dataset, ImplicitArgumentDataset)
@@ -178,60 +176,165 @@ class FullClassifier(BaseClassifier):
                 sample_idx_dict.values()[0][0],
                 sample_idx_dict.values()[-1][-1] + 1)
 
-    def train_model(self, test_fold_idx, use_val=False, verbose=False):
-        if use_val:
-            if test_fold_idx == 0:
-                val_fold_idx = 9
-            else:
-                val_fold_idx = test_fold_idx - 1
+    def index_raw_features(self):
+        log.info('Building mapping from pred_pointer to dictionary of '
+                 'arg_label : list of raw features')
 
-            val_fold_indices = [val_fold_idx]
+        self.pred_pointer_to_raw_features_dict = {}
 
-            train_sample_indices = \
-                [sample_idx for sample_idx, fold_idx
-                 in enumerate(self.sample_idx_to_fold_idx)
-                 if fold_idx != test_fold_idx
-                 and fold_idx != val_fold_idx]
+        for pred_pointer, sample_idx_dict in \
+                self.pred_pointer_to_sample_idx_dict.items():
+            raw_features_dict = {}
+            for arg_label, sample_indices in sample_idx_dict.items():
+                raw_features_dict[arg_label] = \
+                    [self.raw_features[sample_idx] for sample_idx in
+                     sample_indices]
+            self.pred_pointer_to_raw_features_dict[pred_pointer] = \
+                raw_features_dict
 
+    def eval_feature_subset(
+            self, logit, feature_list, train_raw_features, train_gold,
+            val_fold_indices):
+        training_features = self.get_feature_subset(
+            train_raw_features, feature_list)
+        logit.fit(training_features, train_gold)
+
+        val_score_matrix_mapping = {}
+        for val_fold_idx in val_fold_indices:
+            val_score_matrix_mapping.update(
+                self.predict_fold(
+                    logit, feature_list, val_fold_idx, post_process=True))
+
+        thres, val_metric = self.search_threshold(val_score_matrix_mapping)
+        return thres, val_metric
+
+    def feature_selection(self, logger, logit, train_raw_features, train_gold,
+                          val_fold_indices):
+        logger.info('=' * 20)
+        logger.info('Feature selection under params: {}'.format(
+            logit.get_params()))
+        full_feature_list = deepcopy(train_raw_features[0].feature_list)
+        best_feature_list = []
+        best_score = -1
+        prev_feature_list = []
+
+        while len(full_feature_list) > 0:
+            b_feature = None
+            b_score = -1
+            b_thres = -1
+            for feature in full_feature_list:
+                feature_list = prev_feature_list + [feature]
+                f_thres, f_metric = self.eval_feature_subset(
+                    logit, feature_list, train_raw_features, train_gold,
+                    val_fold_indices)
+                f_score = f_metric.f1()
+                logger.debug(
+                    'Try adding feature {}, thres = {:2f}, '
+                    'score = {:.2f}'.format(feature, f_thres, f_score))
+                if f_score > b_score:
+                    b_feature = feature
+                    b_score = f_score
+                    b_thres = f_thres
+            prev_feature_list.append(b_feature)
+            prev_score = b_score
+            full_feature_list.remove(b_feature)
+            logger.info(
+                'Adding feature {}, with thres = {:.2f}, '
+                'current score = {:.2f}, current set = {}'.format(
+                    b_feature, b_thres, prev_score, prev_feature_list))
+
+            if prev_score > best_score:
+                while len(prev_feature_list) > 1:
+                    r_feature = None
+                    r_score = -1
+                    r_thres = -1
+                    for feature in prev_feature_list:
+                        feature_list = deepcopy(prev_feature_list)
+                        feature_list.remove(feature)
+                        f_thres, f_metric = self.eval_feature_subset(
+                            logit, feature_list, train_raw_features,
+                            train_gold, val_fold_indices)
+                        f_score = f_metric.f1()
+                        logger.debug(
+                            'Try removing feature {}, thres = {:.2f}, '
+                            'score = {:.2f}'.format(feature, f_thres, f_score))
+                        if f_score > r_score:
+                            r_feature = feature
+                            r_score = f_score
+                            r_thres = f_thres
+                    if r_score > prev_score:
+                        prev_feature_list.remove(r_feature)
+                        prev_score = r_score
+                        full_feature_list.append(r_feature)
+                        logger.info(
+                            'Removing feature {}, with thres = {:.2f}, '
+                            'current score = {:.2f}, current set = {}'.format(
+                                r_feature, r_thres, prev_score,
+                                prev_feature_list))
+                    else:
+                        break
+                best_feature_list = deepcopy(prev_feature_list)
+                best_score = prev_score
+                logger.info(
+                    'Setting best score = {:.2f}, best feature set {}'.format(
+                        best_score, best_feature_list))
+
+        best_thres, best_metric = self.eval_feature_subset(
+            logit, best_feature_list, train_raw_features, train_gold,
+            val_fold_indices)
+
+        logger.info(
+            'Best score = {:.2f}, with thres = {:.2f}, '
+            'and feature set {}'.format(
+                best_score, best_thres, best_feature_list))
+
+        return best_feature_list, best_thres, best_metric
+
+    def train_fold(self, test_fold_idx, use_val=False, verbose=False,
+                   log_to_file=False, log_file_path=None):
+        if log_to_file:
+            assert log_file_path
+            fold_logger = get_file_logger(
+                name='fold_{}'.format(test_fold_idx),
+                file_path=log_file_path,
+                log_level='debug' if verbose else 'info',
+                propagate=False)
         else:
-            val_fold_indices = \
-                [fi for fi in range(self.n_splits) if fi != test_fold_idx]
+            fold_logger = log
 
-            train_sample_indices = \
-                [sample_idx for sample_idx, fold_idx
-                 in enumerate(self.sample_idx_to_fold_idx)
-                 if fold_idx != test_fold_idx]
+        train_fold_indices, val_fold_indices = \
+            self.get_train_val_folds(test_fold_idx, use_val=use_val)
+
         log.info('=' * 20)
         log.info(
             'Test fold #{}, use fold #{} as validation'.format(
                 test_fold_idx, val_fold_indices))
 
-        train_features = self.features[train_sample_indices]
+        train_sample_indices = self.get_sample_indices_from_folds(
+            train_fold_indices)
+        train_raw_features = [self.raw_features[sample_idx] for sample_idx
+                              in train_sample_indices]
         train_gold = self.labels[train_sample_indices]
 
         best_param = None
         best_thres = -1
         best_val_f1 = 0
         best_val_metric = None
+        best_feature_list = None
 
         logit = LogisticRegression()
 
         for param in self.param_grid:
             logit.set_params(**param)
 
-            logit.fit(train_features, train_gold)
-
-            val_score_matrix_mapping = {}
-            for val_fold_idx in val_fold_indices:
-                val_score_matrix_mapping.update(
-                    self.predict_fold(logit, val_fold_idx, post_process=True))
-
-            thres, val_metric = \
-                self.search_threshold(val_score_matrix_mapping)
+            feature_list, thres, val_metric = self.feature_selection(
+                fold_logger, logit, train_raw_features, train_gold,
+                val_fold_indices)
 
             debug_msg = \
-                'Validation fold #{}, params = {}, thres = {:.2f}, {}'.format(
-                    val_fold_indices, param, thres, val_metric.to_text())
+                'Validation fold #{}, params = {}, thres = {:.2f}, ' \
+                'feature subset = {}, {}'.format(
+                    val_fold_indices, param, thres, feature_list, val_metric)
 
             if verbose:
                 log.info(debug_msg)
@@ -243,62 +346,68 @@ class FullClassifier(BaseClassifier):
                 best_thres = thres
                 best_val_f1 = val_metric.f1()
                 best_val_metric = val_metric
+                best_feature_list = feature_list
 
         log.info('-' * 20)
         log.info(
             'Validation ford #{}, selecting best param = {}, thres = {:.2f} '
-            'with validation f1 = {}'.format(
-                val_fold_indices, best_param, best_thres, best_val_f1))
+            'best feature subset = {}, with validation f1 = {}'.format(
+                val_fold_indices, best_param, best_thres, best_feature_list,
+                best_val_f1))
 
         logit.set_params(**best_param)
+
+        train_features = self.transformer.transform(
+            [raw_feature.get_subset(best_feature_list) for raw_feature
+             in train_raw_features])
+
         logit.fit(train_features, train_gold)
 
-        test_score_matrix_mapping = \
-            self.predict_fold(logit, test_fold_idx, post_process=True)
-
-        test_metric = self.eval(test_score_matrix_mapping, best_thres)
-
-        log.info(
-            'Test fold #{}, params = {}, thres = {:.2f}, {}'.format(
-                test_fold_idx, best_param, best_thres, test_metric.to_text()))
-
         model_state = FullModelState(
-            logit, best_thres,
-            val_fold_indices, best_val_metric,
-            test_fold_idx, test_metric)
+            logit, best_param, best_thres, best_feature_list,
+            test_fold_idx, val_fold_indices, best_val_metric)
 
-        return model_state, test_score_matrix_mapping, best_thres
+        return model_state
 
-    def set_states(self, states):
-        self.model_list = []
-        self.all_score_matrix_mapping = []
-        for model_state, test_score_matrix_mapping, best_thres in states:
-            self.model_list.append(model_state)
-            self.all_score_matrix_mapping.append(
-                (test_score_matrix_mapping, best_thres))
+    def test_all(self):
+        self.all_metric_mapping = {}
+        assert len(self.model_state_list) == self.n_splits
 
-    def predict_pred_pointer(self, logit, pred_pointer, post_process=False):
-        sample_idx_dict = \
-            self.pred_pointer_to_sample_idx_dict[pred_pointer]
+        for test_fold_idx in range(self.n_splits):
+            logit = self.model_state_list[test_fold_idx].logit
+            feature_list = self.model_state_list[test_fold_idx].feature_list
+            thres = self.model_state_list[test_fold_idx].thres
+
+            test_score_matrix_mapping = self.predict_fold(
+                logit, feature_list, test_fold_idx, post_process=True)
+
+            for pred_pointer, score_matrix in test_score_matrix_mapping.items():
+                eval_metric = self.eval_pred_pointer(
+                    pred_pointer, score_matrix, thres)
+                self.all_metric_mapping[pred_pointer] = eval_metric
+
+    def predict_pred_pointer(
+            self, logit, feature_list, pred_pointer, post_process=True):
+        raw_features_dict = self.pred_pointer_to_raw_features_dict[pred_pointer]
 
         missing_labels = self.get_missing_labels(pred_pointer)
 
         if missing_labels:
-            assert all(label in sample_idx_dict.keys() for label
+            assert all(label in raw_features_dict.keys() for label
                        in missing_labels)
         else:
-            missing_labels = sample_idx_dict.keys()
+            missing_labels = raw_features_dict.keys()
 
         num_labels = len(missing_labels)
-        num_candidates = len(sample_idx_dict.values()[0])
+        num_candidates = len(raw_features_dict.values()[0])
 
         score_matrix = np.ndarray(
             shape=(num_labels, num_candidates))
 
         for row_idx, arg_label in enumerate(missing_labels):
-            sample_idx_list = sample_idx_dict[arg_label]
-            scores = logit.predict_proba(
-                self.features[sample_idx_list])[:, 1]
+            features = self.get_feature_subset(
+                raw_features_dict[arg_label], feature_list)
+            scores = logit.predict_proba(features)[:, 1]
             score_matrix[row_idx, :] = np.array(scores)
 
         if post_process:
@@ -310,11 +419,11 @@ class FullClassifier(BaseClassifier):
 
         return score_matrix
 
-    def predict_fold(self, logit, fold_idx, post_process=False):
+    def predict_fold(self, logit, feature_list, fold_idx, post_process=False):
         score_matrix_mapping = {}
         for pred_pointer in self.fold_idx_to_pred_pointer[fold_idx]:
             score_matrix = self.predict_pred_pointer(
-                logit, pred_pointer, post_process=post_process)
+                logit, feature_list, pred_pointer, post_process=post_process)
             score_matrix_mapping[pred_pointer] = score_matrix
 
         return score_matrix_mapping
@@ -324,12 +433,12 @@ class FullClassifier(BaseClassifier):
         best_thres = -1
         best_f1 = 0
         for thres in thres_list:
-            f1 = self.eval(score_matrix_mapping, thres).f1()
+            f1 = self.eval_multi(score_matrix_mapping, thres).f1()
             if f1 > best_f1:
                 best_thres = thres
                 best_f1 = f1
 
-        eval_metric = self.eval(score_matrix_mapping, best_thres)
+        eval_metric = self.eval_multi(score_matrix_mapping, best_thres)
         return best_thres, eval_metric
 
     def eval_pred_pointer(self, pred_pointer, score_matrix, thres):
@@ -339,7 +448,7 @@ class FullClassifier(BaseClassifier):
             num_gold, dice_score_dict, score_matrix, thres=thres,
             missing_labels=missing_labels)
 
-    def eval(self, score_matrix_mapping, thres):
+    def eval_multi(self, score_matrix_mapping, thres):
         eval_metric = DiceEvalMetric()
 
         for pred_pointer, score_matrix in score_matrix_mapping.items():
@@ -353,18 +462,14 @@ class FullClassifier(BaseClassifier):
         metric_by_pred = defaultdict(DiceEvalMetric)
         metric_by_fold = defaultdict(DiceEvalMetric)
 
-        for score_matrix_mapping, thres in self.all_score_matrix_mapping:
-            for pred_pointer, score_matrix in score_matrix_mapping.items():
-                eval_metric = self.eval_pred_pointer(
-                    pred_pointer, score_matrix, thres)
+        for pred_pointer, eval_metric in self.all_metric_mapping.items():
+            all_metric.add_metric(eval_metric)
 
-                all_metric.add_metric(eval_metric)
+            n_pred = self.pred_pointer_to_n_pred[pred_pointer]
+            metric_by_pred[n_pred].add_metric(eval_metric)
 
-                n_pred = self.pred_pointer_to_n_pred[pred_pointer]
-                metric_by_pred[n_pred].add_metric(eval_metric)
-
-                fold_idx = self.pred_pointer_to_fold_idx[pred_pointer]
-                metric_by_fold[fold_idx].add_metric(eval_metric)
+            fold_idx = self.pred_pointer_to_fold_idx[pred_pointer]
+            metric_by_fold[fold_idx].add_metric(eval_metric)
 
         log.info('=' * 20)
         log.info('All: ' + all_metric.to_text())
@@ -403,12 +508,12 @@ class FullClassifier(BaseClassifier):
         for fold_idx, eval_metric in metric_by_fold.items():
             table_row = [fold_idx, int(eval_metric.num_gold)]
 
-            model_params = self.model_list[fold_idx].logit.get_params()
+            model_params = self.model_state_list[fold_idx].logit.get_params()
             table_row.append(model_params['C'])
             if model_params['class_weight'] != 'balanced':
                 table_row.append(model_params['class_weight'][1])
                 tune_w = True
-            table_row.append(self.model_list[fold_idx].thres)
+            table_row.append(self.model_state_list[fold_idx].thres)
 
             table_row.append(eval_metric.precision())
             table_row.append(eval_metric.recall())

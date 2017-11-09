@@ -9,6 +9,17 @@ from sklearn.model_selection import ParameterGrid
 from utils import log
 
 
+class BaseModelState(object):
+    def __init__(self, logit, param, feature_list, test_fold_idx,
+                 val_fold_indices, val_metric):
+        self.logit = logit
+        self.param = param
+        self.feature_list = feature_list
+        self.test_fold_idx = test_fold_idx
+        self.val_fold_indices = val_fold_indices
+        self.val_metric = val_metric
+
+
 class BaseClassifier(object):
     __metaclass__ = abc.ABCMeta
 
@@ -49,7 +60,10 @@ class BaseClassifier(object):
 
         # list of model states for each fold, including
         # content of each state depends on classifier
-        self.model_list = []
+        self.model_state_list = []
+
+        # mapping from pred_pointer to testing evaluation metric
+        self.all_metric_mapping = None
 
     @abc.abstractmethod
     def read_dataset(self, dataset):
@@ -124,13 +138,40 @@ class BaseClassifier(object):
             grid['class_weight'] = ['balanced']
         self.param_grid = ParameterGrid(grid)
 
-    @abc.abstractmethod
-    def set_states(self, states):
-        pass
+    def get_train_val_folds(self, test_fold_idx, use_val=False):
+        if use_val:
+            # use the previous fold as validation
+            val_fold_idx = \
+                test_fold_idx - 1 if test_fold_idx > 0 else self.n_splits - 1
+            # use all other folds as training
+            train_fold_indices = \
+                [fi for fi in range(self.n_splits)
+                 if fi != test_fold_idx and fi != val_fold_idx]
+            val_fold_indices = [val_fold_idx]
+        else:
+            # use all other folds as both training and validation
+            train_fold_indices = \
+                [fi for fi in range(self.n_splits) if fi != test_fold_idx]
+            val_fold_indices = train_fold_indices
+
+        return train_fold_indices, val_fold_indices
+
+    def get_sample_indices_from_folds(self, fold_indices):
+        return [sample_idx for sample_idx, fold_idx
+                in enumerate(self.sample_idx_to_fold_idx)
+                if fold_idx in fold_indices]
+
+    def get_feature_subset(self, raw_features, feature_list):
+        return self.transformer.transform(
+            [raw_feature.get_subset(feature_list)
+             for raw_feature in raw_features])
+
+    def set_model_states(self, model_state_list):
+        self.model_state_list = model_state_list
 
     def save_models(self, save_path):
         log.info('Saving models to {}'.format(save_path))
-        pkl.dump(self.model_list, open(save_path, 'w'))
+        pkl.dump(self.model_state_list, open(save_path, 'w'))
 
     @abc.abstractmethod
     def print_stats(self, fout=None):

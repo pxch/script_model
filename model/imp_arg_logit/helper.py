@@ -141,4 +141,4 @@ def get_syn_tree_path(dep_graph, token_idx_1, token_idx_2, msg_prefix=''):
 
 
 def global_train(classifier, *args, **kwargs):
-    return classifier.train_model(*args, **kwargs)
+    return classifier.train_fold(*args, **kwargs)
