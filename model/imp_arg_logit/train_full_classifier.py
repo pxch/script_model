@@ -88,6 +88,7 @@ classifier.index_sample_list()
 classifier.preprocess_features(args.featurizer)
 
 classifier.index_raw_features()
+classifier.index_features()
 
 classifier.set_hyper_parameter(
     fit_intercept=args.fit_intercept, tune_w=args.tune_w)
@@ -96,8 +97,9 @@ model_state_list = \
     Parallel(n_jobs=args.n_jobs, verbose=10, backend='multiprocessing')(
         delayed(global_train)(
             classifier, test_fold_idx,
-            use_val=args.use_val, verbose=args.verbose, log_to_file=False,
-            log_file_path=join(path_prefix, 'log-{}'.format(suffix)))
+            use_val=args.use_val, verbose=args.verbose, log_to_file=True,
+            log_file_path=join(path_prefix, 'log-{}-fold_{}.log'.format(
+                suffix, test_fold_idx)))
         for test_fold_idx in range(classifier.n_splits))
 
 classifier.set_model_states(model_state_list)

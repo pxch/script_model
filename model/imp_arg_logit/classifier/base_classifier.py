@@ -50,6 +50,9 @@ class BaseClassifier(object):
         # can be either a DictVectorizer or aFeatureHasher
         self.transformer = None
 
+        self.feature_list = None
+        self.feature_idx_mapping = None
+
         # list of preprocessed features of all samples, a sparse matrix
         self.features = None
         # list of labels of all samples, a numpy array
@@ -127,6 +130,16 @@ class BaseClassifier(object):
         labels = [sample.label for sample in self.sample_list]
         self.labels = np.asarray(labels)
 
+        self.feature_list = self.raw_features[0].feature_list
+        self.feature_idx_mapping = {}
+        for feature in self.feature_list:
+            idx_list = [
+                idx for idx, feature_name
+                in enumerate(self.transformer.feature_names_)
+                if feature_name == feature
+                or feature_name.startswith(feature + '=')]
+            self.feature_idx_mapping[feature] = idx_list
+
     def set_hyper_parameter(self, fit_intercept=True, tune_w=False):
         log.info('Setting hyperparameters range for tuning')
         grid = {'fit_intercept': [fit_intercept]}
@@ -161,10 +174,21 @@ class BaseClassifier(object):
                 in enumerate(self.sample_idx_to_fold_idx)
                 if fold_idx in fold_indices]
 
+    '''
     def get_feature_subset(self, raw_features, feature_list):
         return self.transformer.transform(
             [raw_feature.get_subset(feature_list)
              for raw_feature in raw_features])
+    '''
+
+    def get_feature_subset(self, features, feature_sublist):
+        csc = features.tocsc()
+        for feature in self.feature_list:
+            if feature not in feature_sublist:
+                for col in self.feature_idx_mapping[feature]:
+                    csc.data[csc.indptr[col]:csc.indptr[col+1]] = 0
+        csc.eliminate_zeros()
+        return csc.tocsr()
 
     def set_model_states(self, model_state_list):
         self.model_state_list = model_state_list

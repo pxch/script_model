@@ -89,6 +89,8 @@ class FullClassifier(BaseClassifier):
         self.pred_pointer_to_sample_idx_dict = None
         # mapping from pred_pointers to dictionary of raw features
         self.pred_pointer_to_raw_features_dict = None
+        # mapping from pred_pointers to dictionary of features
+        self.pred_pointer_to_features_dict = None
 
     def read_dataset(self, dataset):
         check_type(dataset, ImplicitArgumentDataset)
@@ -176,6 +178,20 @@ class FullClassifier(BaseClassifier):
                 sample_idx_dict.values()[0][0],
                 sample_idx_dict.values()[-1][-1] + 1)
 
+    def index_features(self):
+        log.info('Building mapping from pred_pointer to dictionary of '
+                 'arg_label : list of features (in a sparse matrix format)')
+
+        self.pred_pointer_to_features_dict = {}
+
+        for pred_pointer, sample_idx_dict in \
+                self.pred_pointer_to_sample_idx_dict.items():
+            features_dict = {}
+            for arg_label, sample_indices in sample_idx_dict.items():
+                features_dict[arg_label] = self.features[sample_indices, :]
+            self.pred_pointer_to_features_dict[pred_pointer] = \
+                features_dict
+
     def index_raw_features(self):
         log.info('Building mapping from pred_pointer to dictionary of '
                  'arg_label : list of raw features')
@@ -193,10 +209,10 @@ class FullClassifier(BaseClassifier):
                 raw_features_dict
 
     def eval_feature_subset(
-            self, logit, feature_list, train_raw_features, train_gold,
+            self, logit, feature_list, train_features, train_gold,
             val_fold_indices):
         training_features = self.get_feature_subset(
-            train_raw_features, feature_list)
+            train_features, feature_list)
         logit.fit(training_features, train_gold)
 
         val_score_matrix_mapping = {}
@@ -208,12 +224,13 @@ class FullClassifier(BaseClassifier):
         thres, val_metric = self.search_threshold(val_score_matrix_mapping)
         return thres, val_metric
 
-    def feature_selection(self, logger, logit, train_raw_features, train_gold,
+    def feature_selection(self, logger, logit, train_features, train_gold,
                           val_fold_indices):
         logger.info('=' * 20)
         logger.info('Feature selection under params: {}'.format(
             logit.get_params()))
-        full_feature_list = deepcopy(train_raw_features[0].feature_list)
+        # full_feature_list = deepcopy(train_raw_features[0].feature_list)
+        full_feature_list = deepcopy(self.feature_list)
         best_feature_list = []
         best_score = -1
         prev_feature_list = []
@@ -225,11 +242,11 @@ class FullClassifier(BaseClassifier):
             for feature in full_feature_list:
                 feature_list = prev_feature_list + [feature]
                 f_thres, f_metric = self.eval_feature_subset(
-                    logit, feature_list, train_raw_features, train_gold,
+                    logit, feature_list, train_features, train_gold,
                     val_fold_indices)
                 f_score = f_metric.f1()
                 logger.debug(
-                    'Try adding feature {}, thres = {:2f}, '
+                    'Try adding feature {}, thres = {:.2f}, '
                     'score = {:.2f}'.format(feature, f_thres, f_score))
                 if f_score > b_score:
                     b_feature = feature
@@ -252,7 +269,7 @@ class FullClassifier(BaseClassifier):
                         feature_list = deepcopy(prev_feature_list)
                         feature_list.remove(feature)
                         f_thres, f_metric = self.eval_feature_subset(
-                            logit, feature_list, train_raw_features,
+                            logit, feature_list, train_features,
                             train_gold, val_fold_indices)
                         f_score = f_metric.f1()
                         logger.debug(
@@ -280,7 +297,7 @@ class FullClassifier(BaseClassifier):
                         best_score, best_feature_list))
 
         best_thres, best_metric = self.eval_feature_subset(
-            logit, best_feature_list, train_raw_features, train_gold,
+            logit, best_feature_list, train_features, train_gold,
             val_fold_indices)
 
         logger.info(
@@ -314,6 +331,7 @@ class FullClassifier(BaseClassifier):
             train_fold_indices)
         train_raw_features = [self.raw_features[sample_idx] for sample_idx
                               in train_sample_indices]
+        train_features = self.features[train_sample_indices, :]
         train_gold = self.labels[train_sample_indices]
 
         best_param = None
@@ -328,7 +346,7 @@ class FullClassifier(BaseClassifier):
             logit.set_params(**param)
 
             feature_list, thres, val_metric = self.feature_selection(
-                fold_logger, logit, train_raw_features, train_gold,
+                fold_logger, logit, train_features, train_gold,
                 val_fold_indices)
 
             debug_msg = \
@@ -357,10 +375,12 @@ class FullClassifier(BaseClassifier):
 
         logit.set_params(**best_param)
 
+        '''
         train_features = self.transformer.transform(
             [raw_feature.get_subset(best_feature_list) for raw_feature
              in train_raw_features])
-
+        '''
+        train_features = self.get_feature_subset(train_features, best_feature_list)
         logit.fit(train_features, train_gold)
 
         model_state = FullModelState(
@@ -388,25 +408,28 @@ class FullClassifier(BaseClassifier):
 
     def predict_pred_pointer(
             self, logit, feature_list, pred_pointer, post_process=True):
-        raw_features_dict = self.pred_pointer_to_raw_features_dict[pred_pointer]
+        # raw_features_dict = self.pred_pointer_to_raw_features_dict[pred_pointer]
+        features_dict = self.pred_pointer_to_features_dict[pred_pointer]
 
         missing_labels = self.get_missing_labels(pred_pointer)
 
         if missing_labels:
-            assert all(label in raw_features_dict.keys() for label
+            assert all(label in features_dict.keys() for label
                        in missing_labels)
         else:
-            missing_labels = raw_features_dict.keys()
+            missing_labels = features_dict.keys()
 
         num_labels = len(missing_labels)
-        num_candidates = len(raw_features_dict.values()[0])
+        # num_candidates = len(raw_features_dict.values()[0])
+        num_candidates = features_dict.values()[0].shape[0]
 
         score_matrix = np.ndarray(
             shape=(num_labels, num_candidates))
 
         for row_idx, arg_label in enumerate(missing_labels):
-            features = self.get_feature_subset(
-                raw_features_dict[arg_label], feature_list)
+            features = features_dict[arg_label]
+            # features = self.get_feature_subset(
+            #     raw_features_dict[arg_label], feature_list)
             scores = logit.predict_proba(features)[:, 1]
             score_matrix[row_idx, :] = np.array(scores)
 
