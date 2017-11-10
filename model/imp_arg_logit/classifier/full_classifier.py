@@ -87,8 +87,6 @@ class FullClassifier(BaseClassifier):
 
         # mapping from pred_pointers to dictionary of sample indices
         self.pred_pointer_to_sample_idx_dict = None
-        # mapping from pred_pointers to dictionary of raw features
-        self.pred_pointer_to_raw_features_dict = None
         # mapping from pred_pointers to dictionary of features
         self.pred_pointer_to_features_dict = None
 
@@ -192,34 +190,16 @@ class FullClassifier(BaseClassifier):
             self.pred_pointer_to_features_dict[pred_pointer] = \
                 features_dict
 
-    def index_raw_features(self):
-        log.info('Building mapping from pred_pointer to dictionary of '
-                 'arg_label : list of raw features')
-
-        self.pred_pointer_to_raw_features_dict = {}
-
-        for pred_pointer, sample_idx_dict in \
-                self.pred_pointer_to_sample_idx_dict.items():
-            raw_features_dict = {}
-            for arg_label, sample_indices in sample_idx_dict.items():
-                raw_features_dict[arg_label] = \
-                    [self.raw_features[sample_idx] for sample_idx in
-                     sample_indices]
-            self.pred_pointer_to_raw_features_dict[pred_pointer] = \
-                raw_features_dict
-
-    def eval_feature_subset(
-            self, logit, feature_list, train_features, train_gold,
-            val_fold_indices):
-        training_features = self.get_feature_subset(
+    def eval_feature_subset(self, logit, feature_list, train_features,
+                            train_gold, val_fold_indices):
+        train_features_subset = self.get_feature_subset(
             train_features, feature_list)
-        logit.fit(training_features, train_gold)
+        logit.fit(train_features_subset, train_gold)
 
         val_score_matrix_mapping = {}
         for val_fold_idx in val_fold_indices:
             val_score_matrix_mapping.update(
-                self.predict_fold(
-                    logit, feature_list, val_fold_idx, post_process=True))
+                self.predict_fold(logit, val_fold_idx, post_process=True))
 
         thres, val_metric = self.search_threshold(val_score_matrix_mapping)
         return thres, val_metric
@@ -229,7 +209,7 @@ class FullClassifier(BaseClassifier):
         logger.info('=' * 20)
         logger.info('Feature selection under params: {}'.format(
             logit.get_params()))
-        # full_feature_list = deepcopy(train_raw_features[0].feature_list)
+
         full_feature_list = deepcopy(self.feature_list)
         best_feature_list = []
         best_score = -1
@@ -329,8 +309,6 @@ class FullClassifier(BaseClassifier):
 
         train_sample_indices = self.get_sample_indices_from_folds(
             train_fold_indices)
-        train_raw_features = [self.raw_features[sample_idx] for sample_idx
-                              in train_sample_indices]
         train_features = self.features[train_sample_indices, :]
         train_gold = self.labels[train_sample_indices]
 
@@ -369,19 +347,16 @@ class FullClassifier(BaseClassifier):
         log.info('-' * 20)
         log.info(
             'Validation ford #{}, selecting best param = {}, thres = {:.2f} '
-            'best feature subset = {}, with validation f1 = {}'.format(
+            'best feature subset = {}, with validation f1 = {:.2f}'.format(
                 val_fold_indices, best_param, best_thres, best_feature_list,
                 best_val_f1))
 
         logit.set_params(**best_param)
 
-        '''
-        train_features = self.transformer.transform(
-            [raw_feature.get_subset(best_feature_list) for raw_feature
-             in train_raw_features])
-        '''
-        train_features = self.get_feature_subset(train_features, best_feature_list)
-        logit.fit(train_features, train_gold)
+        train_features_subset = self.get_feature_subset(
+            train_features, best_feature_list)
+
+        logit.fit(train_features_subset, train_gold)
 
         model_state = FullModelState(
             logit, best_param, best_thres, best_feature_list,
@@ -395,20 +370,17 @@ class FullClassifier(BaseClassifier):
 
         for test_fold_idx in range(self.n_splits):
             logit = self.model_state_list[test_fold_idx].logit
-            feature_list = self.model_state_list[test_fold_idx].feature_list
             thres = self.model_state_list[test_fold_idx].thres
 
             test_score_matrix_mapping = self.predict_fold(
-                logit, feature_list, test_fold_idx, post_process=True)
+                logit, test_fold_idx, post_process=True)
 
             for pred_pointer, score_matrix in test_score_matrix_mapping.items():
                 eval_metric = self.eval_pred_pointer(
                     pred_pointer, score_matrix, thres)
                 self.all_metric_mapping[pred_pointer] = eval_metric
 
-    def predict_pred_pointer(
-            self, logit, feature_list, pred_pointer, post_process=True):
-        # raw_features_dict = self.pred_pointer_to_raw_features_dict[pred_pointer]
+    def predict_pred_pointer(self, logit, pred_pointer, post_process=True):
         features_dict = self.pred_pointer_to_features_dict[pred_pointer]
 
         missing_labels = self.get_missing_labels(pred_pointer)
@@ -420,7 +392,6 @@ class FullClassifier(BaseClassifier):
             missing_labels = features_dict.keys()
 
         num_labels = len(missing_labels)
-        # num_candidates = len(raw_features_dict.values()[0])
         num_candidates = features_dict.values()[0].shape[0]
 
         score_matrix = np.ndarray(
@@ -428,8 +399,6 @@ class FullClassifier(BaseClassifier):
 
         for row_idx, arg_label in enumerate(missing_labels):
             features = features_dict[arg_label]
-            # features = self.get_feature_subset(
-            #     raw_features_dict[arg_label], feature_list)
             scores = logit.predict_proba(features)[:, 1]
             score_matrix[row_idx, :] = np.array(scores)
 
@@ -442,11 +411,11 @@ class FullClassifier(BaseClassifier):
 
         return score_matrix
 
-    def predict_fold(self, logit, feature_list, fold_idx, post_process=False):
+    def predict_fold(self, logit, fold_idx, post_process=False):
         score_matrix_mapping = {}
         for pred_pointer in self.fold_idx_to_pred_pointer[fold_idx]:
             score_matrix = self.predict_pred_pointer(
-                logit, feature_list, pred_pointer, post_process=post_process)
+                logit, pred_pointer, post_process=post_process)
             score_matrix_mapping[pred_pointer] = score_matrix
 
         return score_matrix_mapping

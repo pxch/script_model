@@ -87,7 +87,6 @@ classifier.index_sample_list()
 
 classifier.preprocess_features(args.featurizer)
 
-classifier.index_raw_features()
 classifier.index_features()
 
 classifier.set_hyper_parameter(
@@ -107,6 +106,8 @@ classifier.set_model_states(model_state_list)
 if args.save_models:
     model_save_path = join(path_prefix, 'model-{}.pkl'.format(suffix))
     classifier.save_models(model_save_path)
+
+classifier.test_all()
 
 fout_results = None
 if args.save_results:

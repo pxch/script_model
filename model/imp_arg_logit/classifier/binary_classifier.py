@@ -155,22 +155,21 @@ class BinaryClassifier(BaseClassifier):
             self.pred_pointer_to_sample_idx_list[pred_pointer].append(
                 sample_idx)
 
-    def eval_feature_subset(self, logit, feature_list, train_raw_features,
-                            train_gold, val_raw_features, val_gold):
-        training_features = self.get_feature_subset(
-            train_raw_features, feature_list)
-        logit.fit(training_features, train_gold)
+    def eval_feature_subset(self, logit, feature_list, train_features,
+                            train_gold, val_features, val_gold):
+        training_features_subset = self.get_feature_subset(
+            train_features, feature_list)
+        logit.fit(training_features_subset, train_gold)
 
-        val_features = self.get_feature_subset(
-            val_raw_features, feature_list)
         return BinaryEvalMetric.eval(logit.predict(val_features), val_gold)
 
-    def feature_selection(self, logger, logit, train_raw_features, train_gold,
-                          val_raw_features, val_gold):
+    def feature_selection(self, logger, logit, train_features, train_gold,
+                          val_features, val_gold):
         logger.info('=' * 20)
         logger.info('Feature selection under params: {}'.format(
             logit.get_params()))
-        full_feature_list = deepcopy(train_raw_features[0].feature_list)
+
+        full_feature_list = deepcopy(self.feature_list)
         best_feature_list = []
         best_score = -1
         prev_feature_list = []
@@ -181,8 +180,8 @@ class BinaryClassifier(BaseClassifier):
             for feature in full_feature_list:
                 feature_list = prev_feature_list + [feature]
                 f_score = self.eval_feature_subset(
-                    logit, feature_list, train_raw_features, train_gold,
-                    val_raw_features, val_gold).f1()
+                    logit, feature_list, train_features, train_gold,
+                    val_features, val_gold).f1()
                 logger.debug(
                     'Try adding feature {}, score = {:.2f}'.format(
                         feature, f_score))
@@ -205,8 +204,8 @@ class BinaryClassifier(BaseClassifier):
                         feature_list = deepcopy(prev_feature_list)
                         feature_list.remove(feature)
                         f_score = self.eval_feature_subset(
-                            logit, feature_list, train_raw_features,
-                            train_gold, val_raw_features, val_gold).f1()
+                            logit, feature_list, train_features, train_gold,
+                            val_features, val_gold).f1()
                         logger.debug(
                             'Try removing feature {}, score = {:.2f}'.format(
                                 feature, f_score))
@@ -233,8 +232,8 @@ class BinaryClassifier(BaseClassifier):
             best_score, best_feature_list))
 
         best_metric = self.eval_feature_subset(
-            logit, best_feature_list, train_raw_features, train_gold,
-            val_raw_features, val_gold)
+            logit, best_feature_list, train_features, train_gold,
+            val_features, val_gold)
         return best_feature_list, best_metric
 
     def train_fold(self, test_fold_idx, use_val=False, verbose=False,
@@ -259,14 +258,13 @@ class BinaryClassifier(BaseClassifier):
 
         train_sample_indices = self.get_sample_indices_from_folds(
             train_fold_indices)
-        train_raw_features = [self.raw_features[sample_idx] for sample_idx
-                              in train_sample_indices]
+        train_features = self.features[train_sample_indices, :]
         train_gold = self.labels[train_sample_indices]
 
         val_sample_indices = self.get_sample_indices_from_folds(
             val_fold_indices)
-        val_raw_features = [self.raw_features[sample_idx] for sample_idx
-                            in val_sample_indices]
+        val_features = self.features[val_sample_indices, :]
+
         val_gold = self.labels[val_sample_indices]
 
         best_param = None
@@ -280,8 +278,8 @@ class BinaryClassifier(BaseClassifier):
             logit.set_params(**param)
 
             feature_list, val_metric = self.feature_selection(
-                fold_logger, logit, train_raw_features, train_gold,
-                val_raw_features, val_gold)
+                fold_logger, logit, train_features, train_gold,
+                val_features, val_gold)
 
             debug_msg = \
                 'Validation fold #{}, params = {}, feature subset = {}, ' \
@@ -302,16 +300,15 @@ class BinaryClassifier(BaseClassifier):
         log.info('-' * 20)
         log.info(
             'Validation fold #{}, selecting best param = {}, '
-            'best feature subset = {}, with validation f1 = {}'.format(
+            'best feature subset = {}, with validation f1 = {:.2f}'.format(
                 val_fold_indices, best_param, best_feature_list, best_val_f1))
 
         logit.set_params(**best_param)
 
-        train_features = self.transformer.transform(
-            [raw_feature.get_subset(best_feature_list) for raw_feature
-             in train_raw_features])
+        train_features_subset = self.get_feature_subset(
+            train_features, best_feature_list)
 
-        logit.fit(train_features, train_gold)
+        logit.fit(train_features_subset, train_gold)
 
         model_state = BaseModelState(
             logit, best_param, best_feature_list, test_fold_idx,
@@ -325,14 +322,10 @@ class BinaryClassifier(BaseClassifier):
         assert len(self.model_state_list) == self.n_splits
         for test_fold_idx in range(self.n_splits):
             logit = self.model_state_list[test_fold_idx].logit
-            feature_list = self.model_state_list[test_fold_idx].feature_list
             for pred_pointer in self.fold_idx_to_pred_pointer[test_fold_idx]:
                 sample_idx_list = \
                     self.pred_pointer_to_sample_idx_list[pred_pointer]
-                raw_features = \
-                    [self.raw_features[sample_idx] for sample_idx
-                     in sample_idx_list]
-                features = self.get_feature_subset(raw_features, feature_list)
+                features = self.features[sample_idx_list, :]
                 predict = logit.predict(features)
                 gold = self.labels[sample_idx_list]
                 self.all_prediction_mapping[pred_pointer] = predict

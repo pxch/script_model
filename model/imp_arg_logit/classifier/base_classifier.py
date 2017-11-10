@@ -43,20 +43,19 @@ class BaseClassifier(object):
         # mapping from sample indices to fold indices
         self.sample_idx_to_fold_idx = None
 
-        # list of raw features of all samples,
-        # can be transformed to vectorized features by self.transformer
-        self.raw_features = None
         # transformer for raw features,
-        # can be either a DictVectorizer or aFeatureHasher
+        # either a DictVectorizer or a FeatureHasher
         self.transformer = None
-
-        self.feature_list = None
-        self.feature_idx_mapping = None
 
         # list of preprocessed features of all samples, a sparse matrix
         self.features = None
         # list of labels of all samples, a numpy array
         self.labels = None
+
+        # list of raw features
+        self.feature_list = None
+        # mapping from raw features to list of feature vector indices
+        self.feature_idx_mapping = None
 
         # grid of hyper parameters to search
         self.param_grid = None
@@ -116,29 +115,29 @@ class BaseClassifier(object):
     def preprocess_features(self, featurizer='one_hot'):
         log.info('Processing features with {} featurizer'.format(featurizer))
 
-        self.raw_features = [sample.feature_set for sample in self.sample_list]
+        raw_features = [sample.feature_set for sample in self.sample_list]
+
         if featurizer == 'one_hot':
             self.transformer = DictVectorizer()
-            self.transformer.fit(self.raw_features)
+            self.transformer.fit(raw_features)
         elif featurizer == 'hash':
             self.transformer = FeatureHasher()
         else:
             raise ValueError('Unrecognized featurizer: ' + featurizer)
 
-        self.features = self.transformer.transform(self.raw_features)
+        self.features = self.transformer.transform(raw_features)
 
-        labels = [sample.label for sample in self.sample_list]
-        self.labels = np.asarray(labels)
+        self.labels = np.asarray([sample.label for sample in self.sample_list])
 
-        self.feature_list = self.raw_features[0].feature_list
+        self.feature_list = raw_features[0].feature_list
+
+        feature_names = self.transformer.feature_names_
         self.feature_idx_mapping = {}
         for feature in self.feature_list:
-            idx_list = [
-                idx for idx, feature_name
-                in enumerate(self.transformer.feature_names_)
-                if feature_name == feature
-                or feature_name.startswith(feature + '=')]
-            self.feature_idx_mapping[feature] = idx_list
+            self.feature_idx_mapping[feature] = \
+                [idx for idx, feature_name in enumerate(feature_names)
+                 if feature_name == feature
+                 or feature_name.startswith(feature + '=')]
 
     def set_hyper_parameter(self, fit_intercept=True, tune_w=False):
         log.info('Setting hyperparameters range for tuning')
@@ -173,13 +172,6 @@ class BaseClassifier(object):
         return [sample_idx for sample_idx, fold_idx
                 in enumerate(self.sample_idx_to_fold_idx)
                 if fold_idx in fold_indices]
-
-    '''
-    def get_feature_subset(self, raw_features, feature_list):
-        return self.transformer.transform(
-            [raw_feature.get_subset(feature_list)
-             for raw_feature in raw_features])
-    '''
 
     def get_feature_subset(self, features, feature_sublist):
         csc = features.tocsc()
