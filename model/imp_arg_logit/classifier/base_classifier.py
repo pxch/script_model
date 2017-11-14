@@ -3,6 +3,7 @@ import pickle as pkl
 from collections import defaultdict
 
 import numpy as np
+from sklearn import preprocessing
 from sklearn.feature_extraction import DictVectorizer, FeatureHasher
 from sklearn.model_selection import ParameterGrid
 
@@ -125,7 +126,8 @@ class BaseClassifier(object):
         else:
             raise ValueError('Unrecognized featurizer: ' + featurizer)
 
-        self.features = self.transformer.transform(raw_features)
+        features = self.transformer.transform(raw_features)
+        self.features = preprocessing.maxabs_scale(features)
 
         self.labels = np.asarray([sample.label for sample in self.sample_list])
 
@@ -141,7 +143,7 @@ class BaseClassifier(object):
 
     def set_hyper_parameter(self, fit_intercept=True, tune_w=False):
         log.info('Setting hyperparameters range for tuning')
-        grid = {'fit_intercept': [fit_intercept]}
+        grid = {'fit_intercept': [fit_intercept], 'solver': ['lbfgs']}
         if tune_w:
             grid['C'] = [2 ** x for x in range(-4, 1)]
             grid['class_weight'] = [{0: 1, 1: 2 ** x} for x in range(0, 10)]

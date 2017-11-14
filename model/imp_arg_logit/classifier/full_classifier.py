@@ -359,8 +359,13 @@ class FullClassifier(BaseClassifier):
         logit.fit(train_features_subset, train_gold)
 
         model_state = FullModelState(
-            logit, best_param, best_thres, best_feature_list,
-            test_fold_idx, val_fold_indices, best_val_metric)
+            logit=logit,
+            param=best_param,
+            feature_list=best_feature_list,
+            thres=best_thres,
+            test_fold_idx=test_fold_idx,
+            val_fold_indices=val_fold_indices,
+            best_val_metric=best_val_metric)
 
         return model_state
 
