@@ -365,7 +365,7 @@ class FullClassifier(BaseClassifier):
             thres=best_thres,
             test_fold_idx=test_fold_idx,
             val_fold_indices=val_fold_indices,
-            best_val_metric=best_val_metric)
+            val_metric=best_val_metric)
 
         return model_state
 
