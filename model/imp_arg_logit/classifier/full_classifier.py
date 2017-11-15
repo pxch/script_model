@@ -346,7 +346,7 @@ class FullClassifier(BaseClassifier):
 
         log.info('-' * 20)
         log.info(
-            'Validation ford #{}, selecting best param = {}, thres = {:.2f} '
+            'Validation fold #{}, selecting best param = {}, thres = {:.2f}, '
             'best feature subset = {}, with validation f1 = {:.2f}'.format(
                 val_fold_indices, best_param, best_thres, best_feature_list,
                 best_val_f1))
